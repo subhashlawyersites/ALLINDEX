@@ -1,0 +1,455 @@
+﻿{% extends "base.html" %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 style="margin:0;">{{ state.index_name }} ({{ state.symbol }})</h1>
+      <p class="muted" style="margin:4px 0;">Session {{ state.session_date }} ({{ state.weekday }}) | Bar {{ state.last_bar_time }} IST | Source: {{ source }}</p>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center;">
+      {% if state.avoid_today or state.gap_excluded %}
+        <span class="badge bad">{{ state.status }}</span>
+      {% elif state.status.startswith('CONFIRMED') %}
+        <span class="badge good">{{ state.status }}</span>
+      {% elif state.status.startswith('ARMED') %}
+        <span class="badge warn">{{ state.status }}</span>
+      {% else %}
+        <span class="badge">{{ state.status }}</span>
+      {% endif %}
+      <select id="modeSelect" class="ctrl" onchange="reloadIndexAnalytics(1)">
+        <option value="refined" selected>Refined Rules</option>
+        <option value="baseline">Baseline (Mon-Fri Unfiltered)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="grid" style="margin-top:12px;">
+    <div class="card">
+      <h3 style="margin-top:0;">Live / Latest Signal State</h3>
+      <div class="row-kv"><span>Status:</span><strong>{{ state.status }}</strong></div>
+      <div class="row-kv"><span>Last Close:</span><strong>{{ state.last_close }}</strong></div>
+      <div class="row-kv"><span>SMA(2) / SMA(10):</span><strong>{{ state.sma2 }} / {{ state.sma10 }}</strong></div>
+      <div class="row-kv"><span>Armed Direction:</span><strong>{{ state.armed_dir or 'None' }}</strong></div>
+      <div class="row-kv"><span>Entry / SL / Target(0.60R):</span><strong>{{ state.entry_price or '-' }} / {{ state.stop_price or '-' }} / {{ state.target_price or '-' }}</strong></div>
+      <div class="row-kv"><span>Trades Today:</span><strong>{{ state.trades_today }} / {{ rules.max_trades_per_day }}</strong></div>
+      <p class="muted" style="margin-top:8px;">{{ state.status_reason }}</p>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">Avoidable Days &amp; Index Rules</h3>
+      <div class="row-kv"><span>1Y Refined Benchmark:</span><strong>{{ state.ref_1y_r }}</strong></div>
+      <div class="row-kv"><span>Best Days:</span><strong>{{ state.best_days|join(', ') }}</strong></div>
+      <div class="row-kv"><span>Hard Avoid Days:</span><strong>{{ state.avoid_weekdays|join(', ') if state.avoid_weekdays else 'None' }}</strong></div>
+      <div class="row-kv"><span>Caution / Lighter Days:</span><strong>{{ state.caution_weekdays|join(', ') if state.caution_weekdays else 'None' }}</strong></div>
+      <div class="row-kv"><span>Blocked Time Slots:</span><strong>{{ rules.blocked_times|join(', ') }} IST</strong></div>
+      <div class="row-kv"><span>Latest Entry Cutoff:</span><strong>14:00 IST (EOD 15:15)</strong></div>
+      <p class="muted" style="margin-top:8px;">{{ state.day_note }}</p>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">Exit Levels &amp; Target Ladder (50%–100%)</h3>
+      <div class="row-kv"><span>Progress (-1.0R SL &rarr; +1.0R):</span><strong>{{ state.target_ladder.progress_pct }}%</strong></div>
+      <div class="progress-wrap"><div class="progress-fill" style="width:{{ state.target_ladder.progress_pct }}%;"></div></div>
+      <div class="muted" style="margin-bottom:8px;">{{ state.target_ladder.milestone_label }}</div>
+      <div class="row-kv"><span>Exit - Stop Loss (SL):</span><strong class="neg">{{ state.monitored_trade.sl_price if state.monitored_trade else (state.stop_price or '-') }}</strong></div>
+      <div class="row-kv"><span>Exit - Primary Target (60% / 0.60R):</span><strong class="pos">{{ state.monitored_trade.target_price if state.monitored_trade else (state.target_price or '-') }}</strong></div>
+      <div class="row-kv"><span>Exit - Session Cutoff:</span><strong>15:15 IST (EOD)</strong></div>
+      <hr style="border:0; border-top:1px solid var(--border); margin:8px 0;">
+      {% for lvl in state.target_ladder.levels %}
+        <div class="row-kv">
+          <span>{{ lvl.pct }}% ({{ lvl.r_mult }}R){% if lvl.is_primary %} [Primary Exit Target]{% endif %}:</span>
+          <strong>{{ lvl.price }}</strong>
+        </div>
+      {% else %}
+        <div class="muted">Set or monitor a trade below to view 50%–100% target values.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h3 style="margin-top:0;">Target Percentage Levels &amp; Exit Reference Chart</h3>
+    <p class="muted" style="margin-top:0;">
+      Values at 50%–100% target levels relative to Entry (<strong>{{ state.target_ladder.entry or '-' }}</strong>), Stop-Loss Exit (<strong>{{ state.target_ladder.sl or '-' }}</strong>), and Current Close (<strong>{{ state.last_close }}</strong>).
+    </p>
+    <div class="chart-box"><canvas id="targetProgressChart"></canvas></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 style="margin-top:0;">Actual Trade Monitor</h3>
+      {% if state.monitored_trade %}
+        <div class="row-kv"><span>Active Trade:</span><span class="pos">{{ state.monitored_trade.direction }} @ {{ state.monitored_trade.entry_price }}</span></div>
+        <div class="row-kv"><span>SL / Target:</span><strong>{{ state.monitored_trade.sl_price }} / {{ state.monitored_trade.target_price }}</strong></div>
+        <div class="row-kv"><span>Opened:</span><span>{{ state.monitored_trade.opened_at }}</span></div>
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <input id="manualExitPrice" class="ctrl" type="number" step="0.05" value="{{ state.last_close }}">
+          <button class="btn" onclick="closeTrade()">Close &amp; Log Trade</button>
+        </div>
+      {% else %}
+        <p class="muted">No active monitored position on {{ state.index_key }}. Start monitoring a setup below (auto-logs to history on close):</p>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+          <select id="monDir" class="ctrl">
+            <option value="CALL" {{ 'selected' if state.strike_ladder.direction == 'CALL' else '' }}>CALL</option>
+            <option value="PUT" {{ 'selected' if state.strike_ladder.direction == 'PUT' else '' }}>PUT</option>
+          </select>
+          <input id="monEntry" class="ctrl" type="number" step="0.05" value="{{ state.entry_price or state.last_close }}" placeholder="Entry">
+          <input id="monSl" class="ctrl" type="number" step="0.05" value="{{ state.stop_price or state.last_close }}" placeholder="SL">
+        </div>
+        <button class="btn primary" style="margin-top:10px;" onclick="startTrade()">Start Monitoring Trade</button>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">Recent Index Alerts</h3>
+      <table>
+        <thead><tr><th>Time</th><th>Event</th><th>Details</th></tr></thead>
+        <tbody>
+          {% for ev in events %}
+          <tr><td>{{ ev.time }}</td><td><strong>{{ ev.type }}</strong></td><td>{{ ev.message }}</td></tr>
+          {% else %}
+          <tr><td colspan="3" class="muted">No alerts for {{ state.index_key }} yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h3 style="margin-top:0;">Strike Ladder (ITM1, ATM, OTM1–OTM10) · Spot {{ state.strike_ladder.spot }} · Step {{ state.strike_ladder.step }} · {{ state.strike_ladder.quote_source }}</h3>
+    <table>
+      <thead><tr><th>Zone</th><th>Strike</th><th>Type</th><th>Symbol</th><th>LTP</th></tr></thead>
+      <tbody>
+        {% for r in state.strike_ladder.rows %}
+        <tr>
+          <td><strong>{{ r.label }}</strong></td>
+          <td>{{ r.strike }}</td>
+          <td>{{ r.option_type }}</td>
+          <td class="muted">{{ r.symbol or '-' }}</td>
+          <td>{{ r.ltp if r.ltp is not none else 'Calc Only' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid" style="margin-top:16px;" id="kpiGrid"></div>
+
+  <div class="card" style="margin-top:16px;">
+    <h3 style="margin-top:0;">Recent 15m Bars - Close vs. SMA(2) &amp; SMA(10)</h3>
+    <div class="chart-box"><canvas id="smaChart"></canvas></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 style="margin-top:0;">Historical Cumulative Points Curve</h3>
+      <div class="chart-box"><canvas id="curveChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Weekday Points Breakdown (Mon-Fri)</h3>
+      <div class="chart-box"><canvas id="weekdayChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 style="margin-top:0;">Exit Breakdown (Target / SL / EOD)</h3>
+      <div class="chart-box"><canvas id="exitChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Win / Loss &amp; CALL / PUT Mix</h3>
+      <div class="grid" style="grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="chart-box" style="height:220px;"><canvas id="winLossChart"></canvas></div>
+        <div class="chart-box" style="height:220px;"><canvas id="callPutChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <div class="toolbar">
+      <h3 style="margin:0;">{{ state.index_name }} Historical &amp; Monitored Trade Log</h3>
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <select id="fWeekday" class="ctrl" onchange="reloadIndexAnalytics(1)">
+          <option value="">All Days</option>
+          <option value="Monday">Monday</option>
+          <option value="Tuesday">Tuesday</option>
+          <option value="Wednesday">Wednesday</option>
+          <option value="Thursday">Thursday</option>
+          <option value="Friday">Friday</option>
+        </select>
+        <select id="fDir" class="ctrl" onchange="reloadIndexAnalytics(1)">
+          <option value="">CALL &amp; PUT</option>
+          <option value="CALL">CALL</option>
+          <option value="PUT">PUT</option>
+        </select>
+        <select id="fExit" class="ctrl" onchange="reloadIndexAnalytics(1)">
+          <option value="">All Exits</option>
+          <option value="EXIT_TARGET">EXIT_TARGET</option>
+          <option value="EXIT_SL">EXIT_SL</option>
+          <option value="EXIT_EOD_1515">EXIT_EOD_1515</option>
+          <option value="MANUAL_EXIT">MANUAL_EXIT</option>
+        </select>
+        <select id="fSortBy" class="ctrl" onchange="reloadIndexAnalytics(1)">
+          <option value="session_date" selected>Sort: Date</option>
+          <option value="points">Sort: Points</option>
+          <option value="r_val">Sort: R Value</option>
+          <option value="entry_time">Sort: Entry Time</option>
+          <option value="exit_reason">Sort: Exit Reason</option>
+          <option value="direction">Sort: Direction</option>
+        </select>
+        <select id="fSortDir" class="ctrl" onchange="reloadIndexAnalytics(1)">
+          <option value="desc" selected>Desc</option>
+          <option value="asc">Asc</option>
+        </select>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="cursor:pointer;" onclick="setIndexSort('session_date')">Date / Day</th>
+          <th style="cursor:pointer;" onclick="setIndexSort('direction')">Dir</th>
+          <th style="cursor:pointer;" onclick="setIndexSort('entry_time')">Entry &rarr; Exit</th>
+          <th>Entry / SL / Target</th>
+          <th style="cursor:pointer;" onclick="setIndexSort('exit_reason')">Exit Reason</th>
+          <th style="cursor:pointer;" onclick="setIndexSort('points')">Points / R</th>
+        </tr>
+      </thead>
+      <tbody id="tradeLogBody"></tbody>
+    </table>
+    <div class="toolbar" style="margin-top:12px;">
+      <span class="muted" id="pageInfo">Page 1</span>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="prevBtn" onclick="changeIndexPage(-1)">Prev</button>
+        <button class="btn" id="nextBtn" onclick="changeIndexPage(1)">Next</button>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const IDX_KEY = "{{ state.index_key }}";
+  const TARGET_LADDER = {{ state.target_ladder | tojson }};
+  const LAST_CLOSE = {{ state.last_close | tojson }};
+  let curPage = 1, totalPages = 1;
+  let charts = {};
+
+  function renderTargetProgressChart() {
+    const canvas = document.getElementById("targetProgressChart");
+    if (!canvas) return;
+    if (charts.targetProg) charts.targetProg.destroy();
+
+    const levels = (TARGET_LADDER && TARGET_LADDER.levels) ? TARGET_LADDER.levels : [];
+    const labels = ["SL Exit"].concat(levels.map(l => `${l.pct}% (${l.r_mult}R)`));
+    const slVal = (TARGET_LADDER && TARGET_LADDER.sl != null) ? TARGET_LADDER.sl : null;
+    const levelVals = [slVal].concat(levels.map(l => l.price));
+    const closeSeries = labels.map(() => LAST_CLOSE);
+
+    const barColors = labels.map((_, idx) => {
+      if (idx === 0) return "#ef4444";
+      const lvl = levels[idx - 1];
+      return lvl && lvl.is_primary ? "#22c55e" : "#38bdf8";
+    });
+
+    charts.targetProg = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          {
+            type: "bar",
+            label: "Target / Exit Price Level",
+            data: levelVals,
+            backgroundColor: barColors
+          },
+          {
+            type: "line",
+            label: "Current / Last Close",
+            data: closeSeries,
+            borderColor: "#f59e0b",
+            borderDash: [6, 4],
+            pointRadius: 2,
+            fill: false
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: false } }
+      }
+    });
+  }
+
+  async function startTrade() {
+    const payload = {
+      direction: document.getElementById("monDir").value,
+      entry_price: parseFloat(document.getElementById("monEntry").value),
+      sl_price: parseFloat(document.getElementById("monSl").value)
+    };
+    await fetch(`/api/monitor/${IDX_KEY.toLowerCase()}/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    location.reload();
+  }
+
+  async function closeTrade() {
+    const exitPrice = parseFloat(document.getElementById("manualExitPrice").value);
+    await fetch(`/api/monitor/${IDX_KEY.toLowerCase()}/close`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ exit_price: exitPrice, exit_reason: "MANUAL_EXIT" })
+    });
+    location.reload();
+  }
+
+  function setIndexSort(col) {
+    const byEl = document.getElementById("fSortBy");
+    const dirEl = document.getElementById("fSortDir");
+    if (byEl.value === col) {
+      dirEl.value = dirEl.value === "desc" ? "asc" : "desc";
+    } else {
+      byEl.value = col;
+      dirEl.value = "desc";
+    }
+    reloadIndexAnalytics(1);
+  }
+
+  async function loadSmaChart() {
+    const res = await fetch(`/api/chart/${IDX_KEY.toLowerCase()}`);
+    const payload = await res.json();
+    if (!payload.bars) return;
+    if (charts.sma) charts.sma.destroy();
+    charts.sma = new Chart(document.getElementById("smaChart"), {
+      type: "line",
+      data: {
+        labels: payload.bars.map(b => b.time),
+        datasets: [
+          { label: "Close", data: payload.bars.map(b => b.close), borderColor: "#38bdf8", tension: 0.15, pointRadius: 1.5 },
+          { label: "SMA(2)", data: payload.bars.map(b => b.sma2), borderColor: "#22c55e", tension: 0.15, pointRadius: 0 },
+          { label: "SMA(10)", data: payload.bars.map(b => b.sma10), borderColor: "#f59e0b", tension: 0.15, pointRadius: 0 }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+  }
+
+  function renderIndexData(data) {
+    const s = data.summary;
+    const bestS = s.best_session ? `${s.best_session.date} (${s.best_session.points >= 0 ? '+' : ''}${s.best_session.points})` : 'N/A';
+    const worstS = s.worst_session ? `${s.worst_session.date} (${s.worst_session.points})` : 'N/A';
+    const bestW = s.best_weekday ? `${s.best_weekday.weekday} (${s.best_weekday.points >= 0 ? '+' : ''}${s.best_weekday.points})` : 'N/A';
+    const worstW = s.worst_weekday ? `${s.worst_weekday.weekday} (${s.worst_weekday.points})` : 'N/A';
+
+    document.getElementById("kpiGrid").innerHTML = `
+      <div class="card"><div class="muted">Session Date Net Points</div><div style="margin-top:6px;">Best: <span class="pos">${bestS}</span></div><div>Weakest: <span class="neg">${worstS}</span></div></div>
+      <div class="card"><div class="muted">Cumulative Points &amp; R</div><div style="margin-top:6px;">Net: <strong>${s.cum_pts >= 0 ? '+' : ''}${s.cum_pts} pts</strong> (${s.cum_r >= 0 ? '+' : ''}${s.cum_r}R)</div><div>Peak Pts: <strong>+${s.peak_pts}</strong></div></div>
+      <div class="card"><div class="muted">Weekday Performance (Mon-Fri)</div><div style="margin-top:6px;">Best: <span class="pos">${bestW}</span></div><div>Weakest: <span>${worstW}</span></div></div>
+      <div class="card"><div class="muted">Win / Loss &amp; CALL / PUT Mix</div><div style="margin-top:6px;">WIN: <strong>${s.wins} (${s.win_rate}%)</strong> &middot; LOSS: <strong>${s.losses} (${s.loss_rate}%)</strong></div><div>CALL: <strong>${s.call_cnt} (${s.call_pct}%)</strong> &middot; PUT: <strong>${s.put_cnt} (${s.put_pct}%)</strong></div></div>
+    `;
+
+    ["curve", "weekday", "exit", "winLoss", "callPut"].forEach(k => { if (charts[k]) charts[k].destroy(); });
+
+    charts.curve = new Chart(document.getElementById("curveChart"), {
+      type: "line",
+      data: {
+        labels: data.curve.labels,
+        datasets: [{
+          label: "Cumulative Points",
+          data: data.curve.cum_pts,
+          borderColor: "#38bdf8",
+          backgroundColor: "rgba(56, 189, 248, 0.16)",
+          fill: true,
+          tension: 0.2,
+          pointRadius: 1.5
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+
+    charts.weekday = new Chart(document.getElementById("weekdayChart"), {
+      type: "bar",
+      data: {
+        labels: data.weekdays.map(w => w.weekday.slice(0, 3)),
+        datasets: [{
+          label: "Points",
+          data: data.weekdays.map(w => w.points),
+          backgroundColor: data.weekdays.map(w => w.points >= 0 ? "#22c55e" : "#ef4444")
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+
+    charts.exit = new Chart(document.getElementById("exitChart"), {
+      type: "bar",
+      data: {
+        labels: data.exits.map(e => e.exit_reason),
+        datasets: [{
+          label: "Net Points",
+          data: data.exits.map(e => e.points),
+          backgroundColor: data.exits.map(e => e.points >= 0 ? "#22c55e" : "#ef4444")
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+
+    charts.winLoss = new Chart(document.getElementById("winLossChart"), {
+      type: "doughnut",
+      data: {
+        labels: ["WIN", "LOSS"],
+        datasets: [{ data: [s.wins, s.losses], backgroundColor: ["#22c55e", "#ef4444"] }]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    charts.callPut = new Chart(document.getElementById("callPutChart"), {
+      type: "doughnut",
+      data: {
+        labels: ["CALL", "PUT"],
+        datasets: [{ data: [s.call_cnt, s.put_cnt], backgroundColor: ["#38bdf8", "#f59e0b"] }]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    const p = data.pagination;
+    curPage = p.page;
+    totalPages = p.total_pages;
+    document.getElementById("pageInfo").textContent = `Page ${p.page} of ${p.total_pages} (${p.total_rows} trades)`;
+    document.getElementById("prevBtn").disabled = p.page <= 1;
+    document.getElementById("nextBtn").disabled = p.page >= p.total_pages;
+
+    document.getElementById("tradeLogBody").innerHTML = p.rows.map(r => `
+      <tr>
+        <td><strong>${r.session_date}</strong><br><span class="muted">${r.weekday}</span></td>
+        <td><span class="badge ${r.direction === 'CALL' ? 'good' : 'warn'}">${r.direction}</span></td>
+        <td>${r.entry_time} &rarr; ${r.exit_time}</td>
+        <td>${r.entry_price} / ${r.sl_price} / ${r.target_price}</td>
+        <td>${r.exit_reason}</td>
+        <td class="${r.points >= 0 ? 'pos' : 'neg'}">${r.points >= 0 ? '+' : ''}${r.points} (${r.r_val >= 0 ? '+' : ''}${r.r_val}R)</td>
+      </tr>
+    `).join("") || `<tr><td colspan="6" class="muted">No trades match the selected filters.</td></tr>`;
+  }
+
+  async function reloadIndexAnalytics(page = 1) {
+    const mode = document.getElementById("modeSelect").value;
+    const weekday = document.getElementById("fWeekday").value;
+    const direction = document.getElementById("fDir").value;
+    const exitReason = document.getElementById("fExit").value;
+    const sortBy = document.getElementById("fSortBy").value;
+    const sortDir = document.getElementById("fSortDir").value;
+    const params = new URLSearchParams({ mode, page, per_page: 12, weekday, direction, exit_reason: exitReason, sort_by: sortBy, sort_dir: sortDir });
+    const res = await fetch(`/api/analytics/${IDX_KEY.toLowerCase()}?${params.toString()}`);
+    const data = await res.json();
+    renderIndexData(data);
+  }
+
+  function changeIndexPage(delta) {
+    const next = curPage + delta;
+    if (next >= 1 && next <= totalPages) reloadIndexAnalytics(next);
+  }
+
+  renderTargetProgressChart();
+  loadSmaChart();
+  reloadIndexAnalytics(1);
+</script>
+{% endblock %}

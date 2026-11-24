@@ -1,0 +1,293 @@
+﻿<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title }} | SMA2/SMA10 Decision Support</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-2: #0b1120;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --border: #334155;
+      --accent: #38bdf8;
+      --good: #22c55e;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+    }
+    html[data-theme="light"] {
+      --bg: #f8fafc;
+      --panel: #ffffff;
+      --panel-2: #f1f5f9;
+      --text: #0f172a;
+      --muted: #475569;
+      --border: #cbd5e1;
+      --accent: #0284c7;
+      --good: #16a34a;
+      --warn: #d97706;
+      --bad: #dc2626;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .nav a {
+      color: var(--text);
+      text-decoration: none;
+      padding: 6px 11px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      font-size: 0.88rem;
+    }
+    .nav a:hover { border-color: var(--border); background: var(--panel-2); }
+    .nav a.active { background: var(--accent); color: #fff; font-weight: 600; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.84rem; color: var(--muted); }
+    button.btn, select.ctrl, input.ctrl {
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 0.85rem;
+    }
+    button.btn { cursor: pointer; }
+    button.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+    main { max-width: 1280px; margin: 18px auto; padding: 0 16px 48px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; margin-top: 16px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+    }
+    .badge.good { color: var(--good); border-color: var(--good); }
+    .badge.warn { color: var(--warn); border-color: var(--warn); }
+    .badge.bad { color: var(--bad); border-color: var(--bad); }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.86rem; }
+    th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-size: 0.76rem; text-transform: uppercase; }
+    .muted { color: var(--muted); font-size: 0.86rem; }
+    .row-kv { display: flex; justify-content: space-between; margin: 5px 0; font-size: 0.88rem; }
+    .pos { color: var(--good); font-weight: 700; }
+    .neg { color: var(--bad); font-weight: 700; }
+    .banner {
+      background: var(--panel);
+      border-left: 4px solid var(--warn);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      font-size: 0.88rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .alert-toast {
+      display: none;
+      background: var(--panel);
+      border: 1px solid var(--accent);
+      border-left: 5px solid var(--bad);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      font-size: 0.9rem;
+    }
+    .progress-wrap {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      height: 16px;
+      overflow: hidden;
+      margin: 8px 0;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--warn), var(--good));
+      transition: width 0.3s ease;
+    }
+    .chart-box { position: relative; height: 250px; width: 100%; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <header>
+    <nav class="nav">
+      <a href="/" class="{{ 'active' if active_nav == 'combined' else '' }}">Combined</a>
+      <a href="/nifty50" class="{{ 'active' if active_nav == 'nifty50' else '' }}">NIFTY 50</a>
+      <a href="/sensex" class="{{ 'active' if active_nav == 'sensex' else '' }}">SENSEX</a>
+      <a href="/banknifty" class="{{ 'active' if active_nav == 'banknifty' else '' }}">BANKNIFTY</a>
+      <a href="/finnifty" class="{{ 'active' if active_nav == 'finnifty' else '' }}">FINNIFTY</a>
+      <a href="/auth" class="{{ 'active' if active_nav == 'auth' else '' }}">Fyers Auth</a>
+    </nav>
+    <div class="meta">
+      <span class="badge {{ 'good' if fyers_status and fyers_status.connected else 'warn' }}" id="fyersBadge">
+        Fyers: {{ 'CONNECTED' if fyers_status and fyers_status.connected else 'OFFLINE/CSV' }}
+      </span>
+      <button class="btn" onclick="reconnectFyers()">Connect / Reconnect</button>
+      <button class="btn" id="soundBtn" onclick="toggleSound()">Sound: ON</button>
+      <button class="btn" id="popupBtn" onclick="requestPopupPermission()">Popups: CHECK</button>
+      <button class="btn" onclick="triggerTestAlert()">Test Alert</button>
+      <span>{{ now_str }}</span>
+      <button class="btn" onclick="location.reload()">Refresh</button>
+      <button class="btn" onclick="toggleTheme()">Theme</button>
+    </div>
+  </header>
+  <main>
+    <div class="banner">
+      <div><strong>Decision-Support &amp; Monitoring:</strong> <code>SMA2 / SMA10 COLOR60</code> refined rules. Keep <code>C:\NiftyCrossoverBacktest</code> untouched.</div>
+      <span class="muted" id="fyersMsg">{{ fyers_status.message if fyers_status else '' }}</span>
+    </div>
+    <div class="alert-toast" id="criticalAlertBox"></div>
+    {% block content %}{% endblock %}
+  </main>
+  <script>
+    let soundEnabled = (localStorage.getItem("signal_sound") !== "off");
+    let lastSeenAlertId = localStorage.getItem("last_seen_alert_id") || "";
+
+    function updateSoundBtn() {
+      const b = document.getElementById("soundBtn");
+      if (b) b.textContent = soundEnabled ? "Sound: ON" : "Sound: OFF";
+    }
+    function updatePopupBtn() {
+      const b = document.getElementById("popupBtn");
+      if (!b) return;
+      if (!("Notification" in window)) {
+        b.textContent = "Popups: N/A";
+        return;
+      }
+      if (Notification.permission === "granted") b.textContent = "Popups: ON";
+      else if (Notification.permission === "denied") b.textContent = "Popups: BLOCKED";
+      else b.textContent = "Popups: ENABLE";
+    }
+    async function requestPopupPermission() {
+      if (!("Notification" in window)) return;
+      if (Notification.permission === "default") {
+        await Notification.requestPermission();
+      }
+      updatePopupBtn();
+    }
+    function showBrowserPopup(title, body) {
+      if (!("Notification" in window)) return;
+      if (Notification.permission === "granted") {
+        try {
+          new Notification(title, { body });
+        } catch (e) {}
+      }
+    }
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      localStorage.setItem("signal_sound", soundEnabled ? "on" : "off");
+      updateSoundBtn();
+    }
+    function playChime() {
+      if (!soundEnabled) return;
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = 740;
+        gain.gain.value = 0.08;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        setTimeout(() => { osc.stop(); ctx.close(); }, 220);
+      } catch (e) {}
+    }
+    function displayAlertBanner(ev, withPopupAndSound = true) {
+      const box = document.getElementById("criticalAlertBox");
+      if (box) {
+        box.style.display = "block";
+        box.innerHTML = `<strong>CRITICAL ALERT [${ev.index} · ${ev.type}]:</strong> ${ev.message} <span class="muted">(${ev.time})</span>`;
+      }
+      if (withPopupAndSound) {
+        playChime();
+        showBrowserPopup(`${ev.index} · ${ev.type}`, ev.message);
+      }
+    }
+    async function triggerTestAlert() {
+      await requestPopupPermission();
+      const nowTime = new Date().toLocaleTimeString();
+      displayAlertBanner({
+        index: "NIFTY50",
+        type: "TEST_ALERT",
+        message: "Mock sound + popup alert check (15m rulebook guardrails active).",
+        time: nowTime
+      }, true);
+    }
+
+    async function reconnectFyers() {
+      const btnMsg = document.getElementById("fyersMsg");
+      if (btnMsg) btnMsg.textContent = "Checking Fyers connection...";
+      const res = await fetch("/api/fyers/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      const badge = document.getElementById("fyersBadge");
+      if (badge) {
+        badge.textContent = data.ok ? "Fyers: CONNECTED" : "Fyers: OFFLINE/CSV";
+        badge.className = "badge " + (data.ok ? "good" : "warn");
+      }
+      if (btnMsg) btnMsg.textContent = data.message || "";
+    }
+
+    async function pollCriticalEvents() {
+      try {
+        const res = await fetch("/api/events");
+        const data = await res.json();
+        const evs = data.events || [];
+        if (evs.length > 0 && evs[0].id !== lastSeenAlertId) {
+          lastSeenAlertId = evs[0].id;
+          localStorage.setItem("last_seen_alert_id", lastSeenAlertId);
+          displayAlertBanner(evs[0], true);
+        }
+      } catch (e) {}
+    }
+
+    function toggleTheme() {
+      const html = document.documentElement;
+      const next = html.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      html.setAttribute("data-theme", next);
+      localStorage.setItem("signal_theme", next);
+    }
+    const savedTheme = localStorage.getItem("signal_theme");
+    if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+    updateSoundBtn();
+    updatePopupBtn();
+    pollCriticalEvents();
+    setInterval(pollCriticalEvents, 20000);
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

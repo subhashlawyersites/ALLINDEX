@@ -1,0 +1,284 @@
+﻿from datetime import datetime
+from zoneinfo import ZoneInfo
+from flask import Flask, jsonify, render_template, request
+import pandas as pd
+from analytics_data import build_historical_analytics
+from data_provider import fetch_latest_candles
+from fyers_auth import get_fyers_config, save_or_authorize_fyers, test_fyers_connection
+from signal_engine import COMMON_RULES, INDEX_CONFIGS, evaluate_index_signal
+from strike_ladder import build_strike_ladder, build_target_ladder
+from trade_monitor import (
+    close_monitored_trade,
+    evaluate_monitored_trades_against_market,
+    get_active_trades,
+    get_recent_events,
+    record_event,
+    start_monitored_trade,
+)
+
+IST = ZoneInfo("Asia/Kolkata")
+
+app = Flask(__name__)
+
+
+def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
+    states = []
+    sources = {}
+    price_snaps = {}
+
+    for key in INDEX_CONFIGS:
+        df, src = fetch_latest_candles(key)
+        st = evaluate_index_signal(df, key).to_dict()
+
+        last_row = df.iloc[-1] if not df.empty else {}
+        price_snaps[key] = {
+            "high": float(last_row.get("high", st["last_close"])),
+            "low": float(last_row.get("low", st["last_close"])),
+            "close": float(last_row.get("close", st["last_close"])),
+            "time_str": st["last_bar_time"],
+        }
+
+        if st["avoid_today"]:
+            record_event(key, "AVOID_WEEKDAY", f"{st['weekday']} is avoidable for {key}", "warn")
+        elif st["gap_excluded"]:
+            record_event(key, "GAP_EXCLUDED", f"Session gap <= -0.75% on {key}", "bad")
+        elif st["status"].startswith("CONFIRMED_"):
+            record_event(key, st["status"], f"{key} confirmed {st['status']} @ {st['entry_price']}", "good")
+
+        sources[key] = src
+        states.append(st)
+
+    evaluate_monitored_trades_against_market(price_snaps)
+    active_map = get_active_trades()
+
+    for st in states:
+        k = st["index_key"]
+        mon = active_map.get(k)
+        st["monitored_trade"] = mon
+        ref_entry = mon["entry_price"] if mon else st["entry_price"]
+        ref_sl = mon["sl_price"] if mon else st["stop_price"]
+        ref_dir = mon["direction"] if mon else (st["armed_dir"] or ("PUT" if st["status"].endswith("PUT") else "CALL"))
+
+        st["target_ladder"] = build_target_ladder(
+            direction=ref_dir,
+            entry_price=ref_entry,
+            sl_price=ref_sl,
+            current_price=st["last_close"],
+        )
+        st["strike_ladder"] = build_strike_ladder(
+            index_key=k,
+            spot_price=st["last_close"],
+            direction=ref_dir,
+        )
+
+    fyers_status = test_fyers_connection()
+    return states, sources, fyers_status
+
+
+@app.route("/")
+def combined_dashboard():
+    states, sources, fyers_status = _build_all_states()
+    now_str = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST")
+    return render_template(
+        "combined.html",
+        page_title="Combined Signal Command Center",
+        active_nav="combined",
+        states=states,
+        sources=sources,
+        fyers_status=fyers_status,
+        events=get_recent_events(15),
+        rules=COMMON_RULES,
+        now_str=now_str,
+    )
+
+
+@app.route("/auth", methods=["GET", "POST"])
+def auth_page():
+    auth_result = None
+    if request.method == "POST":
+        auth_result = save_or_authorize_fyers(
+            client_id=request.form.get("client_id", ""),
+            secret_key=request.form.get("secret_key", ""),
+            redirect_uri=request.form.get("redirect_uri", ""),
+            auth_code=request.form.get("auth_code", ""),
+            direct_token=request.form.get("direct_token", ""),
+        )
+    cfg = get_fyers_config()
+    fyers_status = test_fyers_connection()
+    now_str = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST")
+    return render_template(
+        "auth.html",
+        page_title="Fyers Authorization & Token Setup",
+        active_nav="auth",
+        cfg=cfg,
+        fyers_status=fyers_status,
+        auth_result=auth_result,
+        now_str=now_str,
+    )
+
+
+@app.route("/<index_slug>")
+def single_index_page(index_slug: str):
+    key = index_slug.upper()
+    if key not in INDEX_CONFIGS:
+        states, sources, fyers_status = _build_all_states()
+        return render_template(
+            "combined.html",
+            page_title="Combined Signal Command Center",
+            active_nav="combined",
+            states=states,
+            sources=sources,
+            fyers_status=fyers_status,
+            events=get_recent_events(15),
+            rules=COMMON_RULES,
+            now_str=datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST"),
+        ), 404
+
+    states, sources, fyers_status = _build_all_states()
+    state = next(item for item in states if item["index_key"] == key)
+    now_str = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST")
+    return render_template(
+        "index_page.html",
+        page_title=f"{state['index_name']} Live Signal & Rules",
+        active_nav=key.lower(),
+        state=state,
+        source=sources[key],
+        fyers_status=fyers_status,
+        events=[ev for ev in get_recent_events(25) if ev["index"] == key][:10],
+        rules=COMMON_RULES,
+        now_str=now_str,
+        all_index_keys=list(INDEX_CONFIGS.keys()),
+    )
+
+
+@app.route("/api/fyers/connect", methods=["POST"])
+def api_fyers_connect():
+    payload = request.get_json(silent=True) or {}
+    if payload.get("auth_code") or payload.get("direct_token") or payload.get("client_id"):
+        res = save_or_authorize_fyers(
+            client_id=payload.get("client_id", ""),
+            secret_key=payload.get("secret_key", ""),
+            redirect_uri=payload.get("redirect_uri", ""),
+            auth_code=payload.get("auth_code", ""),
+            direct_token=payload.get("direct_token", ""),
+        )
+        return jsonify(res)
+    status = test_fyers_connection()
+    return jsonify({"ok": status["connected"], "message": status["message"], "status": status})
+
+
+@app.route("/api/monitor/<index_slug>/start", methods=["POST"])
+def api_monitor_start(index_slug: str):
+    key = index_slug.upper()
+    if key not in INDEX_CONFIGS:
+        return jsonify({"error": "Unknown index"}), 404
+    body = request.get_json(silent=True) or {}
+    rec = start_monitored_trade(
+        index_key=key,
+        direction=body.get("direction", "CALL"),
+        entry_price=float(body["entry_price"]),
+        sl_price=float(body["sl_price"]),
+        target_price=float(body["target_price"]) if body.get("target_price") is not None else None,
+        session_date=body.get("session_date"),
+        weekday=body.get("weekday"),
+        entry_time=body.get("entry_time"),
+    )
+    return jsonify({"ok": True, "monitored_trade": rec})
+
+
+@app.route("/api/monitor/<index_slug>/close", methods=["POST"])
+def api_monitor_close(index_slug: str):
+    key = index_slug.upper()
+    if key not in INDEX_CONFIGS:
+        return jsonify({"error": "Unknown index"}), 404
+    body = request.get_json(silent=True) or {}
+    closed = close_monitored_trade(
+        index_key=key,
+        exit_price=float(body["exit_price"]),
+        exit_reason=body.get("exit_reason", "MANUAL_EXIT"),
+        exit_time=body.get("exit_time"),
+    )
+    if not closed:
+        return jsonify({"ok": False, "message": "No active monitored trade for index"}), 404
+    return jsonify({"ok": True, "closed_trade": closed})
+
+
+@app.route("/api/events")
+def api_events():
+    idx = (request.args.get("index") or "").upper()
+    evs = get_recent_events(40)
+    if idx in INDEX_CONFIGS:
+        evs = [e for e in evs if e["index"] == idx]
+    return jsonify({"events": evs[:20]})
+
+
+@app.route("/api/chart/<index_slug>")
+def api_chart(index_slug: str):
+    key = index_slug.upper()
+    if key not in INDEX_CONFIGS:
+        return jsonify({"error": "Unknown index"}), 404
+
+    df, src = fetch_latest_candles(key)
+    work = df.copy()
+    ts = pd.to_datetime(work["timestamp_ist"], errors="coerce")
+    if ts.isna().all() and "epoch" in work.columns:
+        ts = pd.to_datetime(work["epoch"], unit="s", utc=True).dt.tz_convert(IST)
+    work["ts"] = ts
+    work = work.dropna(subset=["ts"]).sort_values("ts").tail(50).reset_index(drop=True)
+    work["sma2"] = work["close"].rolling(2).mean()
+    work["sma10"] = work["close"].rolling(10).mean()
+
+    bars = [
+        {
+            "time": r["ts"].strftime("%d %b %H:%M"),
+            "open": round(float(r["open"]), 2),
+            "high": round(float(r["high"]), 2),
+            "low": round(float(r["low"]), 2),
+            "close": round(float(r["close"]), 2),
+            "sma2": round(float(r["sma2"]), 2) if pd.notna(r["sma2"]) else None,
+            "sma10": round(float(r["sma10"]), 2) if pd.notna(r["sma10"]) else None,
+        }
+        for _, r in work.iterrows()
+    ]
+    return jsonify({"index": key, "source": src, "bars": bars})
+
+
+@app.route("/api/analytics/<scope>")
+def api_analytics(scope: str):
+    mode = request.args.get("mode", "refined")
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 15))
+    weekday = request.args.get("weekday", "")
+    direction = request.args.get("direction", "")
+    exit_reason = request.args.get("exit_reason", "")
+    sort_by = request.args.get("sort_by", "session_date")
+    sort_dir = request.args.get("sort_dir", "desc")
+    data = build_historical_analytics(
+        scope=scope,
+        mode=mode,
+        page=page,
+        per_page=per_page,
+        weekday_filter=weekday,
+        direction_filter=direction,
+        exit_filter=exit_reason,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
+    return jsonify(data)
+
+
+@app.route("/api/status")
+def api_status():
+    states, sources, fyers_status = _build_all_states()
+    return jsonify({
+        "updated_ist": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST"),
+        "fyers": fyers_status,
+        "rules": COMMON_RULES,
+        "sources": sources,
+        "events": get_recent_events(15),
+        "indices": states,
+    })
+
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5055, debug=False)

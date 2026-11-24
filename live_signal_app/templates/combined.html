@@ -1,0 +1,311 @@
+﻿{% extends "base.html" %}
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1 style="margin:0;">Combined Multi-Index Command &amp; Analytics</h1>
+      <p class="muted" style="margin:4px 0;">Live signals, target progress, critical alerts, multi-index comparison, and historical charts.</p>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <label class="muted">Rule Set:</label>
+      <select id="modeSelect" class="ctrl" onchange="reloadAnalytics(1)">
+        <option value="refined" selected>Refined (&lt;=14:00, No Bad Slots, Skip Bad Index-Days)</option>
+        <option value="baseline">Baseline (Mon-Fri Unfiltered up to 15:14)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="grid">
+    {% for s in states %}
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="margin:0; font-size:1.12rem;"><a href="/{{ s.index_key|lower }}" style="color:var(--accent); text-decoration:none;">{{ s.index_name }}</a></h2>
+        {% if s.avoid_today or s.gap_excluded or s.status.startswith('BLOCKED') %}
+          <span class="badge bad">{{ s.status }}</span>
+        {% elif s.status.startswith('CONFIRMED') %}
+          <span class="badge good">{{ s.status }}</span>
+        {% elif s.status.startswith('ARMED') %}
+          <span class="badge warn">{{ s.status }}</span>
+        {% else %}
+          <span class="badge">{{ s.status }}</span>
+        {% endif %}
+      </div>
+      <p class="muted" style="margin:6px 0 8px;">{{ s.session_date }} ({{ s.weekday }}) | Bar {{ s.last_bar_time }} | {{ sources[s.index_key] }}</p>
+      <div class="row-kv"><span>Spot / SMA2 / SMA10:</span><strong>{{ s.last_close }} / {{ s.sma2 }} / {{ s.sma10 }}</strong></div>
+      <div class="row-kv"><span>ATM Strike:</span><strong>{{ s.strike_ladder.atm or '-' }} ({{ s.strike_ladder.direction }})</strong></div>
+      <div class="row-kv"><span>Avoid Days:</span><span>{{ s.avoid_weekdays|join(', ') if s.avoid_weekdays else 'None (caution: ' + (s.caution_weekdays|join(', ') or 'Friday') + ')' }}</span></div>
+      {% if s.target_ladder.active %}
+      <div class="progress-wrap"><div class="progress-fill" style="width:{{ s.target_ladder.progress_pct }}%;"></div></div>
+      <div class="muted">{{ s.target_ladder.milestone_label }} ({{ s.target_ladder.progress_pct }}%)</div>
+      {% endif %}
+      <p class="muted" style="margin-top:8px;">{{ s.status_reason }}</p>
+      <a href="/{{ s.index_key|lower }}" class="btn" style="display:inline-block; text-decoration:none; margin-top:4px;">Open {{ s.index_key }}</a>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h3 style="margin-top:0;">Critical Event Alerts Log</h3>
+    <table>
+      <thead><tr><th>Time (IST)</th><th>Index</th><th>Event</th><th>Message</th></tr></thead>
+      <tbody>
+        {% for ev in events %}
+        <tr>
+          <td>{{ ev.time }}</td>
+          <td><strong>{{ ev.index }}</strong></td>
+          <td><span class="badge {{ 'good' if ev.severity == 'good' else ('bad' if ev.severity == 'bad' else 'warn') }}">{{ ev.type }}</span></td>
+          <td>{{ ev.message }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No critical alerts recorded yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid" style="margin-top:16px;" id="kpiGrid"></div>
+
+  <div class="card" style="margin-top:16px;">
+    <h3 style="margin-top:0;">Multi-Index Historical Comparison</h3>
+    <table>
+      <thead>
+        <tr><th>Index</th><th>Avoidable Days</th><th>Trades</th><th>Win %</th><th>Avg R</th><th>Cum R</th><th>Cum Points</th></tr>
+      </thead>
+      <tbody id="compBody"></tbody>
+    </table>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 style="margin-top:0;">Cumulative Points Curve</h3>
+      <div class="chart-box"><canvas id="curveChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Weekday Performance (Mon–Fri Points)</h3>
+      <div class="chart-box"><canvas id="weekdayChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 style="margin-top:0;">Exit Breakdown (Target / SL / EOD)</h3>
+      <div class="chart-box"><canvas id="exitChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Win / Loss &amp; CALL / PUT Mix</h3>
+      <div class="grid" style="grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="chart-box" style="height:220px;"><canvas id="winLossChart"></canvas></div>
+        <div class="chart-box" style="height:220px;"><canvas id="callPutChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <div class="toolbar">
+      <h3 style="margin:0;">Historical &amp; Monitored Trade Log</h3>
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <select id="fWeekday" class="ctrl" onchange="reloadAnalytics(1)">
+          <option value="">All Days</option>
+          <option value="Monday">Monday</option>
+          <option value="Tuesday">Tuesday</option>
+          <option value="Wednesday">Wednesday</option>
+          <option value="Thursday">Thursday</option>
+          <option value="Friday">Friday</option>
+        </select>
+        <select id="fDir" class="ctrl" onchange="reloadAnalytics(1)">
+          <option value="">CALL &amp; PUT</option>
+          <option value="CALL">CALL</option>
+          <option value="PUT">PUT</option>
+        </select>
+        <select id="fExit" class="ctrl" onchange="reloadAnalytics(1)">
+          <option value="">All Exits</option>
+          <option value="EXIT_TARGET">EXIT_TARGET</option>
+          <option value="EXIT_SL">EXIT_SL</option>
+          <option value="EXIT_EOD_1515">EXIT_EOD_1515</option>
+          <option value="MANUAL_EXIT">MANUAL_EXIT</option>
+        </select>
+        <select id="fSortBy" class="ctrl" onchange="reloadAnalytics(1)">
+          <option value="session_date" selected>Sort: Date</option>
+          <option value="points">Sort: Points</option>
+          <option value="r_val">Sort: R Value</option>
+          <option value="entry_time">Sort: Entry Time</option>
+          <option value="exit_reason">Sort: Exit Reason</option>
+          <option value="direction">Sort: Direction</option>
+        </select>
+        <select id="fSortDir" class="ctrl" onchange="reloadAnalytics(1)">
+          <option value="desc" selected>Desc</option>
+          <option value="asc">Asc</option>
+        </select>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="cursor:pointer;" onclick="setSort('session_date')">Date / Day</th>
+          <th style="cursor:pointer;" onclick="setSort('index')">Index</th>
+          <th style="cursor:pointer;" onclick="setSort('direction')">Dir</th>
+          <th style="cursor:pointer;" onclick="setSort('entry_time')">Entry &rarr; Exit</th>
+          <th>Entry / SL / Target</th>
+          <th style="cursor:pointer;" onclick="setSort('exit_reason')">Exit Reason</th>
+          <th style="cursor:pointer;" onclick="setSort('points')">Points / R</th>
+        </tr>
+      </thead>
+      <tbody id="tradeLogBody"></tbody>
+    </table>
+    <div class="toolbar" style="margin-top:12px;">
+      <span class="muted" id="pageInfo">Page 1</span>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="prevBtn" onclick="changePage(-1)">Prev</button>
+        <button class="btn" id="nextBtn" onclick="changePage(1)">Next</button>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let curPage = 1, totalPages = 1;
+  let charts = {};
+
+  function setSort(col) {
+    const byEl = document.getElementById("fSortBy");
+    const dirEl = document.getElementById("fSortDir");
+    if (byEl.value === col) {
+      dirEl.value = dirEl.value === "desc" ? "asc" : "desc";
+    } else {
+      byEl.value = col;
+      dirEl.value = "desc";
+    }
+    reloadAnalytics(1);
+  }
+
+  function renderCharts(data) {
+    const s = data.summary;
+    const bestS = s.best_session ? `${s.best_session.date} (${s.best_session.points >= 0 ? '+' : ''}${s.best_session.points})` : 'N/A';
+    const worstS = s.worst_session ? `${s.worst_session.date} (${s.worst_session.points})` : 'N/A';
+    const bestW = s.best_weekday ? `${s.best_weekday.weekday} (${s.best_weekday.points >= 0 ? '+' : ''}${s.best_weekday.points})` : 'N/A';
+    const worstW = s.worst_weekday ? `${s.worst_weekday.weekday} (${s.worst_weekday.points})` : 'N/A';
+
+    document.getElementById("kpiGrid").innerHTML = `
+      <div class="card"><div class="muted">Session Date Net Points</div><div style="margin-top:6px;">Best: <span class="pos">${bestS}</span></div><div>Weakest: <span class="neg">${worstS}</span></div></div>
+      <div class="card"><div class="muted">Cumulative Points &amp; R</div><div style="margin-top:6px;">Net: <strong>${s.cum_pts >= 0 ? '+' : ''}${s.cum_pts} pts</strong> (${s.cum_r >= 0 ? '+' : ''}${s.cum_r}R)</div><div>Peak Pts: <strong>+${s.peak_pts}</strong></div></div>
+      <div class="card"><div class="muted">Weekday Performance (Mon–Fri)</div><div style="margin-top:6px;">Best: <span class="pos">${bestW}</span></div><div>Weakest: <span>${worstW}</span></div></div>
+      <div class="card"><div class="muted">Win / Loss &amp; CALL / PUT Mix</div><div style="margin-top:6px;">WIN: <strong>${s.wins} (${s.win_rate}%)</strong> &middot; LOSS: <strong>${s.losses} (${s.loss_rate}%)</strong></div><div>CALL: <strong>${s.call_cnt} (${s.call_pct}%)</strong> &middot; PUT: <strong>${s.put_cnt} (${s.put_pct}%)</strong></div></div>
+    `;
+
+    document.getElementById("compBody").innerHTML = data.comparison.map(c => `
+      <tr>
+        <td><strong>${c.index_name}</strong></td>
+        <td>${c.avoid_days}</td>
+        <td>${c.trades}</td>
+        <td>${c.win_pct}%</td>
+        <td>${c.avg_r >= 0 ? '+' : ''}${c.avg_r}R</td>
+        <td class="${c.cum_r >= 0 ? 'pos' : 'neg'}">${c.cum_r >= 0 ? '+' : ''}${c.cum_r}R</td>
+        <td class="${c.cum_pts >= 0 ? 'pos' : 'neg'}">${c.cum_pts >= 0 ? '+' : ''}${c.cum_pts}</td>
+      </tr>
+    `).join("");
+
+    Object.values(charts).forEach(ch => ch.destroy());
+    charts = {};
+
+    charts.curve = new Chart(document.getElementById("curveChart"), {
+      type: "line",
+      data: {
+        labels: data.curve.labels,
+        datasets: [{
+          label: "Cumulative Points",
+          data: data.curve.cum_pts,
+          borderColor: "#38bdf8",
+          backgroundColor: "rgba(56, 189, 248, 0.16)",
+          fill: true,
+          tension: 0.2,
+          pointRadius: 1.5
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+
+    charts.weekday = new Chart(document.getElementById("weekdayChart"), {
+      type: "bar",
+      data: {
+        labels: data.weekdays.map(w => w.weekday.slice(0, 3)),
+        datasets: [{
+          label: "Points",
+          data: data.weekdays.map(w => w.points),
+          backgroundColor: data.weekdays.map(w => w.points >= 0 ? "#22c55e" : "#ef4444")
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+
+    charts.exit = new Chart(document.getElementById("exitChart"), {
+      type: "bar",
+      data: {
+        labels: data.exits.map(e => e.exit_reason),
+        datasets: [{
+          label: "Net Points",
+          data: data.exits.map(e => e.points),
+          backgroundColor: data.exits.map(e => e.points >= 0 ? "#22c55e" : "#ef4444")
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+
+    charts.winLoss = new Chart(document.getElementById("winLossChart"), {
+      type: "doughnut",
+      data: {
+        labels: ["WIN", "LOSS"],
+        datasets: [{ data: [s.wins, s.losses], backgroundColor: ["#22c55e", "#ef4444"] }]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    charts.callPut = new Chart(document.getElementById("callPutChart"), {
+      type: "doughnut",
+      data: {
+        labels: ["CALL", "PUT"],
+        datasets: [{ data: [s.call_cnt, s.put_cnt], backgroundColor: ["#38bdf8", "#f59e0b"] }]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    const p = data.pagination;
+    curPage = p.page;
+    totalPages = p.total_pages;
+    document.getElementById("pageInfo").textContent = `Page ${p.page} of ${p.total_pages} (${p.total_rows} trades)`;
+    document.getElementById("prevBtn").disabled = p.page <= 1;
+    document.getElementById("nextBtn").disabled = p.page >= p.total_pages;
+
+    document.getElementById("tradeLogBody").innerHTML = p.rows.map(r => `
+      <tr>
+        <td><strong>${r.session_date}</strong><br><span class="muted">${r.weekday}</span></td>
+        <td>${r.index}</td>
+        <td><span class="badge ${r.direction === 'CALL' ? 'good' : 'warn'}">${r.direction}</span></td>
+        <td>${r.entry_time} &rarr; ${r.exit_time}</td>
+        <td>${r.entry_price} / ${r.sl_price} / ${r.target_price}</td>
+        <td>${r.exit_reason}</td>
+        <td class="${r.points >= 0 ? 'pos' : 'neg'}">${r.points >= 0 ? '+' : ''}${r.points} (${r.r_val >= 0 ? '+' : ''}${r.r_val}R)</td>
+      </tr>
+    `).join("") || `<tr><td colspan="7" class="muted">No trades match the selected filters.</td></tr>`;
+  }
+
+  async function reloadAnalytics(page = 1) {
+    const mode = document.getElementById("modeSelect").value;
+    const weekday = document.getElementById("fWeekday").value;
+    const direction = document.getElementById("fDir").value;
+    const exitReason = document.getElementById("fExit").value;
+    const sortBy = document.getElementById("fSortBy").value;
+    const sortDir = document.getElementById("fSortDir").value;
+    const params = new URLSearchParams({ mode, page, per_page: 12, weekday, direction, exit_reason: exitReason, sort_by: sortBy, sort_dir: sortDir });
+    const res = await fetch(`/api/analytics/all?${params.toString()}`);
+    const data = await res.json();
+    renderCharts(data);
+  }
+
+  function changePage(delta) {
+    const next = curPage + delta;
+    if (next >= 1 && next <= totalPages) reloadAnalytics(next);
+  }
+
+  reloadAnalytics(1);
+</script>
+{% endblock %}

@@ -1,0 +1,50 @@
+﻿{% extends "base.html" %}
+{% block content %}
+  <h1>Fyers Authorization &amp; Connection Setup</h1>
+  <p class="muted">Configure your Fyers API v3 credentials or exchange an authorization code / save an access token for live 15m candles and option quotes.</p>
+
+  {% if auth_result %}
+  <div class="card" style="margin-bottom:16px; border-color: {{ 'var(--good)' if auth_result.ok else 'var(--bad)' }};">
+    <strong>{{ 'Authorization / Connection Success' if auth_result.ok else 'Authorization Notice' }}:</strong>
+    <div>{{ auth_result.message }}</div>
+  </div>
+  {% endif %}
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 style="margin-top:0;">Save Credentials / Exchange Auth Code</h3>
+      <form method="post">
+        <div style="margin-bottom:10px;">
+          <label class="muted">FYERS_CLIENT_ID (App ID)</label><br>
+          <input class="ctrl" style="width:100%;" type="text" name="client_id" value="{{ cfg.client_id }}" placeholder="e.g. XXXXX-100">
+        </div>
+        <div style="margin-bottom:10px;">
+          <label class="muted">FYERS_SECRET_KEY</label><br>
+          <input class="ctrl" style="width:100%;" type="password" name="secret_key" value="{{ cfg.secret_key }}" placeholder="Enter secret key">
+        </div>
+        <div style="margin-bottom:10px;">
+          <label class="muted">FYERS_REDIRECT_URI</label><br>
+          <input class="ctrl" style="width:100%;" type="text" name="redirect_uri" value="{{ cfg.redirect_uri }}">
+        </div>
+        <div style="margin-bottom:10px;">
+          <label class="muted">Authorization Code (exchanges into access token)</label><br>
+          <input class="ctrl" style="width:100%;" type="text" name="auth_code" placeholder="Paste auth_code from Fyers redirect URL">
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="muted">Or Direct FYERS_ACCESS_TOKEN</label><br>
+          <input class="ctrl" style="width:100%;" type="text" name="direct_token" placeholder="Paste access token if already generated">
+        </div>
+        <button class="btn primary" type="submit">Save &amp; Authorize</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">Current Connection Status</h3>
+      <div class="row-kv"><span>Status:</span><strong>{{ 'CONNECTED' if fyers_status.connected else 'DISCONNECTED' }}</strong></div>
+      <div class="row-kv"><span>Details:</span><span>{{ fyers_status.message }}</span></div>
+      <div class="row-kv"><span>Client ID Configured:</span><strong>{{ 'Yes' if cfg.client_id else 'No' }}</strong></div>
+      <div class="row-kv"><span>Access Token Saved:</span><strong>{{ 'Yes' if cfg.has_token else 'No' }}</strong></div>
+      <p class="muted" style="margin-top:12px;">If Fyers is offline or unauthenticated, the signal engine automatically falls back to your local 15m CSV files in <code>C:\AllIndicesBacktest\data\</code>.</p>
+    </div>
+  </div>
+{% endblock %}

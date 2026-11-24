@@ -1,0 +1,29 @@
+﻿services:
+  - type: web
+    name: allindex-signal-app
+    runtime: python
+    region: singapore
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --chdir live_signal_app app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
+    disk:
+      name: allindex-data-disk
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.10
+      - key: TZ
+        value: Asia/Kolkata
+      - key: DATA_MOUNT_PATH
+        value: /var/data
+      - key: SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: FYERS_CLIENT_ID
+        sync: false
+      - key: FYERS_SECRET_KEY
+        sync: false
+      - key: FYERS_REDIRECT_URI
+        sync: false
