@@ -1,4 +1,4 @@
-﻿import os
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -26,13 +26,13 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10) -> tuple[pd.Da
     in C:\AllIndicesBacktest\.env, falling back cleanly to local CSVs if unavailable.
     """
     cfg = INDEX_CONFIGS[index_key]
-    client_id = os.getenv("FYERS_CLIENT_ID", "").strip()
-    access_token = os.getenv("FYERS_ACCESS_TOKEN", "").strip()
+    client_id = (os.getenv("FYERS_APP_ID") or os.getenv("FYERS_CLIENT_ID") or "").strip()
+    access_token = (load_access_token() or os.getenv("FYERS_ACCESS_TOKEN") or "").strip()
 
     if client_id and access_token:
         try:
             from fyers_auth import load_access_token
-from fyers_apiv3 import fyersModel
+            from fyers_apiv3 import fyersModel
 
             auth_token = access_token if ":" in access_token else f"{client_id}:{access_token}"
             fyers = fyersModel.FyersModel(client_id=client_id, is_async=False, token=auth_token, log_path=str(DATA_DIR))
