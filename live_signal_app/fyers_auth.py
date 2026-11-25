@@ -58,6 +58,9 @@ def save_access_token(access_token: str) -> None:
     path = _token_file_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    _cid = (os.getenv("FYERS_APP_ID") or os.getenv("FYERS_CLIENT_ID") or "").strip()
+    if _cid:
+        _save_token_to_db(_cid, token, payload["session_date"], payload["saved_at_ist"])
     cid = (os.getenv("FYERS_APP_ID") or os.getenv("FYERS_CLIENT_ID") or "").strip()
     if cid:
         _save_token_to_db(cid, token, payload["session_date"], payload["saved_at_ist"])
@@ -95,8 +98,8 @@ def _save_token_to_db(client_id: str, token: str, session_date: str, updated_at_
                     "updated_at_ist = EXCLUDED.updated_at_ist",
                     (client_id, token, session_date, updated_at_ist),
                 )
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[Fyers DB token error] {exc}")
 
 
 def _load_token_from_db(client_id: str) -> str:
@@ -121,8 +124,8 @@ def _load_token_from_db(client_id: str) -> str:
                 row = cur.fetchone()
                 if row and row[0]:
                     return str(row[0]).strip()
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[Fyers DB token error] {exc}")
     return ""
 
 
@@ -143,7 +146,13 @@ def load_access_token() -> str:
         if db_tok:
             os.environ["FYERS_ACCESS_TOKEN"] = db_tok
             return db_tok
-    return (os.getenv("FYERS_ACCESS_TOKEN") or "").strip()
+    _cid = (os.getenv("FYERS_APP_ID") or os.getenv("FYERS_CLIENT_ID") or "").strip()
+    if _cid:
+        _db_tok = _load_token_from_db(_cid)
+        if _db_tok:
+            os.environ["FYERS_ACCESS_TOKEN"] = _db_tok
+            return _db_tok
+    return ""
 
 
 def _build_session() -> fyersModel.SessionModel:
