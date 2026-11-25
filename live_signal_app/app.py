@@ -2,7 +2,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
 import json
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request
 from fyers_auth import fyers_auth_bp
 import pandas as pd
 from analytics_data import build_historical_analytics
@@ -63,6 +63,7 @@ def set_index_feed_enabled(index_key: str, enabled: bool) -> dict[str, bool]:
 
 
 
+
 ACTIVE_FEED_FILE = Path(__file__).resolve().parent / ".active_feed_index.json"
 _ACTIVE_FEED_KEY = "NIFTY50"
 
@@ -76,19 +77,23 @@ def get_active_feed_index() -> str:
                 _ACTIVE_FEED_KEY = saved.upper()
         except Exception:
             pass
+    if _ACTIVE_FEED_KEY not in INDEX_CONFIGS:
+        _ACTIVE_FEED_KEY = "NIFTY50"
     return _ACTIVE_FEED_KEY
 
 
 def set_active_feed_index(index_key: str) -> str:
     global _ACTIVE_FEED_KEY
-    k = index_key.upper()
-    if k in INDEX_CONFIGS:
-        _ACTIVE_FEED_KEY = k
-        try:
-            ACTIVE_FEED_FILE.write_text(json.dumps({"active_index": k}), encoding="utf-8")
-        except Exception:
-            pass
+    k = str(index_key or "").upper()
+    if k not in INDEX_CONFIGS:
+        k = "NIFTY50"
+    _ACTIVE_FEED_KEY = k
+    try:
+        ACTIVE_FEED_FILE.write_text(json.dumps({"active_index": k}), encoding="utf-8")
+    except Exception:
+        pass
     return _ACTIVE_FEED_KEY
+
 
 
 def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
@@ -355,49 +360,6 @@ def api_analytics(scope: str):
 
 
 
-@app.route("/api/stream")
-def api_stream():
-    import json as _json
-    import time as _time
-
-    def _event_generator():
-        while True:
-            try:
-                states, sources, fyers_status = _build_all_states()
-                payload = {
-                    "updated_ist": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST"),
-                    "fyers": fyers_status,
-                    "sources": sources,
-                    "events": get_recent_events(15),
-                    "indices": states,
-                }
-                yield f"data: {_json.dumps(payload, default=str)}\n\n"
-            except Exception as exc:
-                yield f"data: {_json.dumps({'error': str(exc)})}\n\n"
-            _time.sleep(1.0)
-
-    return Response(
-        _event_generator(),
-        mimetype="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-        },
-    )
-
-
-
-@app.route("/api/feed/active", methods=["GET", "POST"])
-def api_feed_active():
-    if request.method == "POST":
-        body = request.get_json(silent=True) or {}
-        target = str(body.get("index_key") or body.get("index") or "").upper()
-        if target not in INDEX_CONFIGS:
-            return jsonify({"ok": False, "error": "Invalid index_key"}), 400
-        active = set_active_feed_index(target)
-        return jsonify({"ok": True, "active_index": active})
-    return jsonify({"ok": True, "active_index": get_active_feed_index()})
 
 @app.route("/api/status")
 def api_status():
@@ -405,6 +367,7 @@ def api_status():
     return jsonify({
         "updated_ist": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST"),
         "fyers": fyers_status,
+        "active_feed_index": get_active_feed_index(),
         "rules": COMMON_RULES,
         "sources": sources,
         "events": get_recent_events(15),

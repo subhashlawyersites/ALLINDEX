@@ -139,6 +139,21 @@
   </style>
 </head>
 <body>
+
+<div id="topLiveFeedBar" style="background:rgba(15,23,42,0.92); border-bottom:1px solid rgba(148,163,184,0.2); padding:8px 16px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; font-size:13px;">
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+    <span class="badge good">EXCLUSIVE FEED</span>
+    <span>Active Live Feed: <strong id="topActiveFeedName">{{ active_feed_index or 'NIFTY50' }}</strong></span>
+    <span class="muted" id="topActiveFeedSpot"></span>
+  </div>
+  <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+    <button type="button" class="btn" data-topbar-feed="NIFTY50" onclick="window.switchLiveFeedIndex && window.switchLiveFeedIndex('NIFTY50')">NIFTY 50</button>
+    <button type="button" class="btn" data-topbar-feed="SENSEX" onclick="window.switchLiveFeedIndex && window.switchLiveFeedIndex('SENSEX')">SENSEX</button>
+    <button type="button" class="btn" data-topbar-feed="BANKNIFTY" onclick="window.switchLiveFeedIndex && window.switchLiveFeedIndex('BANKNIFTY')">BANKNIFTY</button>
+    <button type="button" class="btn" data-topbar-feed="FINNIFTY" onclick="window.switchLiveFeedIndex && window.switchLiveFeedIndex('FINNIFTY')">FINNIFTY</button>
+  </div>
+</div>
+
   <header>
     <nav class="nav">
       <a href="/" class="{{ 'active' if active_nav == 'combined' else '' }}">Combined</a>
@@ -294,49 +309,7 @@
 
 
 
-<script>
-(function() {
-  function applyPayload(data) {
-    if (!data || !Array.isArray(data.indices)) return;
-    if (data.updated_ist) {
-      document.querySelectorAll("[data-live-clock]").forEach(el => { el.textContent = data.updated_ist; });
-    }
-    if (typeof window.onLiveStatusUpdate === "function") {
-      window.onLiveStatusUpdate(data);
-    }
-  }
 
-  async function fetchImmediateSnapshot() {
-    try {
-      const res = await fetch("/api/status", { cache: "no-store" });
-      if (res.ok) applyPayload(await res.json());
-    } catch (_) {}
-  }
-
-  window.triggerLivePoll = fetchImmediateSnapshot;
-
-  document.addEventListener("DOMContentLoaded", () => {
-    fetchImmediateSnapshot();
-    if (typeof window.EventSource === "function") {
-      const es = new EventSource("/api/stream");
-      es.onmessage = (evt) => {
-        try {
-          const parsed = JSON.parse(evt.data);
-          if (!parsed.error) applyPayload(parsed);
-        } catch (_) {}
-      };
-      es.onerror = () => {
-        const badge = document.getElementById("liveStreamBadge");
-        if (badge) badge.textContent = "STREAM: RECONNECTING";
-      };
-      es.onopen = () => {
-        const badge = document.getElementById("liveStreamBadge");
-        if (badge) badge.textContent = "STREAM: LIVE";
-      };
-    }
-  });
-})();
-</script>
 
 </body>
 </html>

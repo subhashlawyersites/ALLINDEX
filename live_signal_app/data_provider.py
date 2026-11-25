@@ -25,8 +25,8 @@ _RATE_LIMIT_UNTIL = 0.0
 _LAST_RATE_LOG = 0.0
 
 HISTORY_TTL_SEC = 45.0
-QUOTE_TTL_SEC = 1.5
-RATE_BACKOFF_SEC = 65.0
+QUOTE_TTL_SEC = 1.6
+RATE_BACKOFF_SEC = 70.0
 
 
 def _is_rate_limited(resp: object) -> bool:
