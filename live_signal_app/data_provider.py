@@ -24,8 +24,8 @@ _QUOTE_CACHE: dict[str, tuple[float, dict]] = {}
 _RATE_LIMIT_UNTIL = 0.0
 _LAST_RATE_LOG = 0.0
 
-HISTORY_TTL_SEC = 20.0
-QUOTE_TTL_SEC = 2.0
+HISTORY_TTL_SEC = 45.0
+QUOTE_TTL_SEC = 1.5
 RATE_BACKOFF_SEC = 65.0
 
 
@@ -44,6 +44,29 @@ def _note_rate_limit(context_label: str, resp: object) -> None:
     if now - _LAST_RATE_LOG >= 15.0:
         _LAST_RATE_LOG = now
         print(f"[Fyers rate-limit backoff {int(RATE_BACKOFF_SEC)}s] {context_label}: {resp}")
+
+
+
+_SESSION_CANDLES: dict[str, pd.DataFrame] = {}
+
+
+def _merge_live_quote_into_df(df: pd.DataFrame, live_quote: dict, now_ist: datetime) -> pd.DataFrame:
+    if df is None or df.empty or not live_quote or live_quote.get("ltp") is None:
+        return df
+    try:
+        ltp = float(live_quote["ltp"])
+        if ltp <= 0:
+            return df
+        out = df.copy()
+        idx_last = out.index[-1]
+        cur_high = float(out.loc[idx_last, "high"])
+        cur_low = float(out.loc[idx_last, "low"])
+        out.loc[idx_last, "close"] = ltp
+        out.loc[idx_last, "high"] = max(cur_high, ltp)
+        out.loc[idx_last, "low"] = min(cur_low, ltp)
+        return out
+    except Exception:
+        return df
 
 
 def _load_csv_fallback(index_key: str) -> pd.DataFrame:
@@ -144,6 +167,7 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10, allow_fyers: b
                     df["timestamp_ist"] = pd.to_datetime(df["epoch"], unit="s", utc=True).dt.tz_convert(IST).dt.strftime("%Y-%m-%d %H:%M:%S%z")
                     with _CACHE_LOCK:
                         _HISTORY_CACHE[index_key] = (time.monotonic(), df.copy(), "FYERS_LIVE_15M")
+                        _SESSION_CANDLES[index_key] = df.copy()
                     if live_quote:
                         df.attrs["live_quote"] = live_quote
                     return df, "FYERS_LIVE_15M"
@@ -152,4 +176,12 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10, allow_fyers: b
             except Exception as exc:
                 print(f"[Fyers history error] {index_key} ({cfg['symbol']}): {exc}")
 
-    return _load_csv_fallback(index_key), "LOCAL_CSV_1Y"
+    with _CACHE_LOCK:
+        sess_df = _SESSION_CANDLES.get(index_key)
+    if sess_df is not None and not sess_df.empty:
+        return sess_df.copy(), "SESSION_CACHED_15M"
+    df_csv = _load_csv_fallback(index_key)
+    with _CACHE_LOCK:
+        if index_key not in _SESSION_CANDLES and df_csv is not None and not df_csv.empty:
+            _SESSION_CANDLES[index_key] = df_csv.copy()
+    return df_csv, "LOCAL_CSV_1Y"

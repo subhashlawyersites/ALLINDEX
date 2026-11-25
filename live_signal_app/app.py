@@ -62,13 +62,43 @@ def set_index_feed_enabled(index_key: str, enabled: bool) -> dict[str, bool]:
     return state
 
 
+
+ACTIVE_FEED_FILE = Path(__file__).resolve().parent / ".active_feed_index.json"
+_ACTIVE_FEED_KEY = "NIFTY50"
+
+
+def get_active_feed_index() -> str:
+    global _ACTIVE_FEED_KEY
+    if ACTIVE_FEED_FILE.exists():
+        try:
+            saved = json.loads(ACTIVE_FEED_FILE.read_text(encoding="utf-8")).get("active_index", "")
+            if isinstance(saved, str) and saved.upper() in INDEX_CONFIGS:
+                _ACTIVE_FEED_KEY = saved.upper()
+        except Exception:
+            pass
+    return _ACTIVE_FEED_KEY
+
+
+def set_active_feed_index(index_key: str) -> str:
+    global _ACTIVE_FEED_KEY
+    k = index_key.upper()
+    if k in INDEX_CONFIGS:
+        _ACTIVE_FEED_KEY = k
+        try:
+            ACTIVE_FEED_FILE.write_text(json.dumps({"active_index": k}), encoding="utf-8")
+        except Exception:
+            pass
+    return _ACTIVE_FEED_KEY
+
+
 def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
     states = []
     sources = {}
     price_snaps = {}
 
+    active_feed_key = get_active_feed_index()
     for key in INDEX_CONFIGS:
-        feed_on = (key == "NIFTY50")
+        feed_on = (key == active_feed_key)
         df, src = fetch_latest_candles(key, allow_fyers=feed_on)
         st = evaluate_index_signal(df, key).to_dict()
         live_q = (df.attrs or {}).get("live_quote") if (feed_on and hasattr(df, "attrs")) else {}
@@ -77,6 +107,7 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
         st["live_ltp"] = float(live_ltp) if live_ltp is not None else float(st.get("last_close") or 0.0)
         st["data_source"] = src
         st["feed_enabled"] = feed_on
+        st["feed_state_label"] = "FEED RECEIVING" if feed_on else "FEED BLOCKED TEMPORARILY"
 
         last_row = df.iloc[-1] if not df.empty else {}
         spot_now = st["live_ltp"] if (feed_on and src == "FYERS_LIVE_15M" and live_ltp is not None) else float(last_row.get("close", st["last_close"]))
@@ -138,6 +169,7 @@ def combined_dashboard():
         events=get_recent_events(15),
         rules=COMMON_RULES,
         now_str=now_str,
+        active_feed_index=get_active_feed_index(),
     )
 
 
@@ -165,6 +197,7 @@ def auth_page():
         fyers_status=fyers_status,
         auth_result=auth_result,
         now_str=now_str,
+        active_feed_index=get_active_feed_index(),
     )
 
 
@@ -352,6 +385,19 @@ def api_stream():
             "Connection": "keep-alive",
         },
     )
+
+
+
+@app.route("/api/feed/active", methods=["GET", "POST"])
+def api_feed_active():
+    if request.method == "POST":
+        body = request.get_json(silent=True) or {}
+        target = str(body.get("index_key") or body.get("index") or "").upper()
+        if target not in INDEX_CONFIGS:
+            return jsonify({"ok": False, "error": "Invalid index_key"}), 400
+        active = set_active_feed_index(target)
+        return jsonify({"ok": True, "active_index": active})
+    return jsonify({"ok": True, "active_index": get_active_feed_index()})
 
 @app.route("/api/status")
 def api_status():

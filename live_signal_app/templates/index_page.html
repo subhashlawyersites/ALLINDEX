@@ -461,6 +461,16 @@ window.onLiveStatusUpdate = function(data) {
   if (!data || !Array.isArray(data.indices) || typeof IDX_KEY === "undefined") return;
   const idx = data.indices.find(item => item.index_key === IDX_KEY);
   if (!idx) return;
+  const pSt = document.getElementById("pageFeedStatus");
+  const pBtn = document.getElementById("pageActivateFeedBtn");
+  if (pSt) {
+    pSt.textContent = idx.feed_enabled ? "FEED RECEIVING" : "FEED BLOCKED TEMPORARILY";
+    pSt.className = idx.feed_enabled ? "pos" : "muted";
+  }
+  if (pBtn) {
+    pBtn.textContent = idx.feed_enabled ? "FEED RECEIVING (Active)" : "Activate Live Feed (Disable Others)";
+    pBtn.classList.toggle("primary", !Boolean(idx.feed_enabled));
+  }
 
   const livePriceEl = document.querySelector(`[data-live-price="${IDX_KEY}"]`);
   if (livePriceEl) {
@@ -489,5 +499,20 @@ window.onLiveStatusUpdate = function(data) {
   if (tradesEl && data.rules) {
     tradesEl.textContent = `${idx.trades_today ?? 0} / ${data.rules.max_trades_per_day ?? 2}`;
   }
+};
+</script>
+
+
+<script>
+window.activateThisIndexFeed = async function() {
+  if (typeof IDX_KEY === "undefined") return;
+  try {
+    const res = await fetch("/api/feed/active", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ index_key: IDX_KEY })
+    });
+    if (res.ok && window.triggerLivePoll) await window.triggerLivePoll();
+  } catch (_) {}
 };
 </script>

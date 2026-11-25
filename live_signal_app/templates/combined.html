@@ -15,7 +15,27 @@
   </div>
 
   <div class="grid">
-    {% for s in states %}
+    
+  <div class="card" style="margin-bottom:14px;">
+    <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px;">
+      <div>
+        <strong>Select Active Live Feed Index (Single Exclusive Feed to Save Fyers Quota):</strong>
+        <span class="muted" style="margin-left:8px;">Active: <strong id="activeFeedLabel">{{ active_feed_index or 'NIFTY50' }}</strong></span>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        {% for s in states %}
+          <button type="button"
+                  class="btn {{ 'primary' if s.feed_enabled else '' }}"
+                  data-select-feed="{{ s.index_key }}"
+                  onclick="selectExclusiveFeed('{{ s.index_key }}')">
+            {{ s.index_key }}: {{ 'FEED RECEIVING' if s.feed_enabled else 'Activate Feed' }}
+          </button>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  {% for s in states %}
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <h2 style="margin:0; font-size:1.12rem;"><a href="/{{ s.index_key|lower }}" style="color:var(--accent); text-decoration:none;">{{ s.index_name }}</a></h2>
@@ -38,6 +58,10 @@
       <div class="muted">{{ s.target_ladder.milestone_label }} ({{ s.target_ladder.progress_pct }}%)</div>
       {% endif %}
       <p class="muted" style="margin-top:8px;" data-reason="{{ s.index_key }}">{{ s.status_reason }}</p>
+      <div class="row-kv" style="margin-top:8px;">
+        <span>Feed Status:</span>
+        <strong data-feed-status="{{ s.index_key }}" class="{{ 'pos' if s.feed_enabled else 'muted' }}">{{ 'FEED RECEIVING' if s.feed_enabled else 'FEED BLOCKED TEMPORARILY' }}</strong>
+      </div>
       <a href="/{{ s.index_key|lower }}" class="btn" style="display:inline-block; text-decoration:none; margin-top:4px;">Open {{ s.index_key }}</a>
     </div>
     {% endfor %}
@@ -312,14 +336,56 @@
 
 
 
+
+
+
+
 <script>
+window.selectExclusiveFeed = async function(indexKey) {
+  try {
+    const res = await fetch("/api/feed/active", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ index_key: indexKey })
+    });
+    if (res.ok && window.triggerLivePoll) {
+      await window.triggerLivePoll();
+    }
+  } catch (_) {}
+};
+
 window.onLiveStatusUpdate = function(data) {
   if (!data || !Array.isArray(data.indices)) return;
+  const activeItem = data.indices.find(i => i.feed_enabled);
+  const activeLbl = document.getElementById("activeFeedLabel");
+  if (activeLbl && activeItem) activeLbl.textContent = activeItem.index_key;
+
   data.indices.forEach(idx => {
-    const reasonEl = document.querySelector(`[data-reason="${idx.index_key}"]`);
-    if (reasonEl && idx.status_reason) {
-      reasonEl.textContent = idx.status_reason;
+    const selBtn = document.querySelector(`[data-select-feed="${idx.index_key}"]`);
+    if (selBtn) {
+      selBtn.textContent = idx.feed_enabled ? `${idx.index_key}: FEED RECEIVING` : `Activate ${idx.index_key}`;
+      selBtn.classList.toggle("primary", Boolean(idx.feed_enabled));
     }
+    const feedSt = document.querySelector(`[data-feed-status="${idx.index_key}"]`);
+    if (feedSt) {
+      feedSt.textContent = idx.feed_enabled ? "FEED RECEIVING" : "FEED BLOCKED TEMPORARILY";
+      feedSt.className = idx.feed_enabled ? "pos" : "muted";
+    }
+    const badgeEl = document.querySelector(`[data-status-badge="${idx.index_key}"]`);
+    if (badgeEl && idx.status) {
+      badgeEl.textContent = idx.status;
+      badgeEl.className = "badge";
+      if (idx.avoid_today || idx.gap_excluded || String(idx.status).startsWith("BLOCKED")) {
+        badgeEl.classList.add("bad");
+      } else if (String(idx.status).startsWith("CONFIRMED")) {
+        badgeEl.classList.add("good");
+      } else if (String(idx.status).startsWith("ARMED")) {
+        badgeEl.classList.add("warn");
+      }
+    }
+    const reasonEl = document.querySelector(`[data-reason="${idx.index_key}"]`);
+    if (reasonEl && idx.status_reason) reasonEl.textContent = idx.status_reason;
+
     const spotSmaEl = document.querySelector(`[data-spot-sma="${idx.index_key}"]`);
     if (spotSmaEl) {
       const spotVal = (idx.spot_price != null) ? idx.spot_price : idx.last_close;
@@ -332,4 +398,3 @@ window.onLiveStatusUpdate = function(data) {
   });
 };
 </script>
-
