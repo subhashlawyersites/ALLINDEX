@@ -361,6 +361,19 @@ def api_analytics(scope: str):
 
 
 
+
+
+@app.route("/api/feed/active", methods=["GET", "POST"])
+def api_feed_active():
+    if request.method == "POST":
+        body = request.get_json(silent=True) or {}
+        target = str(body.get("index_key") or body.get("index") or request.args.get("index_key") or "").strip().upper()
+        if target not in INDEX_CONFIGS:
+            return jsonify({"ok": False, "error": f"Unknown index: {target}"}), 400
+        active = set_active_feed_index(target)
+        return jsonify({"ok": True, "active_index": active})
+    return jsonify({"ok": True, "active_index": get_active_feed_index()})
+
 @app.route("/api/status")
 def api_status():
     states, sources, fyers_status = _build_all_states()
