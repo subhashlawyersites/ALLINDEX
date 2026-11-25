@@ -180,7 +180,7 @@ def test_fyers_connection() -> dict:
     token = load_access_token()
     if not creds["client_id"] or not token:
         return {"ok": False, "connected": False, "message": "Missing FYERS_APP_ID or FYERS_ACCESS_TOKEN"}
-    auth_token = token if ":" in token else f"{creds['client_id']}:{token}"
+    auth_token = token.split(":", 1)[-1].strip()
     try:
         client = fyersModel.FyersModel(
             client_id=creds["client_id"],
@@ -201,7 +201,7 @@ def get_fyers_client(log_path: str = ""):
     token = load_access_token()
     if not creds["client_id"] or not token:
         return None
-    auth_token = token if ":" in token else f"{creds['client_id']}:{token}"
+    auth_token = token.split(":", 1)[-1].strip()
     try:
         return fyersModel.FyersModel(
             client_id=creds["client_id"],

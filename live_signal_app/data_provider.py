@@ -34,7 +34,7 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10) -> tuple[pd.Da
         try:
             from fyers_apiv3 import fyersModel
 
-            auth_token = access_token if ":" in access_token else f"{client_id}:{access_token}"
+            auth_token = access_token.split(":", 1)[-1].strip()
             fyers = fyersModel.FyersModel(client_id=client_id, is_async=False, token=auth_token, log_path=str(DATA_DIR))
 
             now_ist = datetime.now(IST)
