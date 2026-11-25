@@ -177,3 +177,20 @@ def test_fyers_connection() -> dict:
         return {"ok": False, "message": f"Fyers check failed: {profile}"}
     except Exception as exc:
         return {"ok": False, "message": f"Fyers check error: {exc}"}
+
+
+def get_fyers_client(log_path: str = ""):
+    creds = get_fyers_credentials()
+    token = load_access_token()
+    if not creds["client_id"] or not token:
+        return None
+    auth_token = token if ":" in token else f"{creds['client_id']}:{token}"
+    try:
+        return fyersModel.FyersModel(
+            client_id=creds["client_id"],
+            is_async=False,
+            token=auth_token,
+            log_path=log_path,
+        )
+    except Exception:
+        return None
