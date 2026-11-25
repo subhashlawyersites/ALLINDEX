@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 from dotenv import load_dotenv
 from signal_engine import INDEX_CONFIGS
+from fyers_auth import load_access_token
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -31,7 +32,6 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10) -> tuple[pd.Da
 
     if client_id and access_token:
         try:
-            from fyers_auth import load_access_token
             from fyers_apiv3 import fyersModel
 
             auth_token = access_token if ":" in access_token else f"{client_id}:{access_token}"
