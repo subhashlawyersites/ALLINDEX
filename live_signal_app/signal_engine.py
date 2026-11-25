@@ -1,4 +1,4 @@
-﻿from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Optional
 import pandas as pd
@@ -101,7 +101,8 @@ def _normalize_candles_df(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     if "datetime" not in out.columns:
         if "timestamp_ist" in out.columns:
-            parsed = pd.to_datetime(out["timestamp_ist"], errors="coerce")
+            cleaned_ts = out["timestamp_ist"].astype(str).str.replace(r"\s+IST$", "", regex=True).str.strip()
+            parsed = pd.to_datetime(cleaned_ts, errors="coerce")
             if hasattr(parsed.dt, "tz") and parsed.dt.tz is not None:
                 parsed = parsed.dt.tz_convert("Asia/Kolkata").dt.tz_localize(None)
             out["datetime"] = parsed
