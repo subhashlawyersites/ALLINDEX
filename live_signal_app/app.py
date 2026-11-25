@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 from zoneinfo import ZoneInfo
 from flask import Flask, jsonify, render_template, request
 from fyers_auth import fyers_auth_bp
@@ -97,6 +97,8 @@ def combined_dashboard():
 @app.route("/auth", methods=["GET", "POST"])
 def auth_page():
     auth_result = None
+    if request.args.get("fyers_auth") == "ok" and not auth_result:
+        auth_result = {"ok": True, "message": "Fresh Fyers access token exchanged and saved."}
     if request.method == "POST":
         auth_result = save_or_authorize_fyers(
             client_id=request.form.get("client_id", ""),

@@ -99,16 +99,19 @@ def fyers_callback():
     if not auth_code:
         return {"ok": False, "error": f"No auth_code returned: {dict(request.args)}"}, 400
 
-    session = _build_session()
-    session.set_token(auth_code)
-    resp = session.generate_token()
+    try:
+        session = _build_session()
+        session.set_token(auth_code)
+        resp = session.generate_token()
+    except Exception as exc:
+        return {"ok": False, "error": f"Token exchange exception: {exc}"}, 400
 
     access_token = (resp.get("access_token") or "").strip() if isinstance(resp, dict) else ""
     if not access_token:
         return {"ok": False, "error": f"Token exchange failed: {resp}"}, 400
 
     save_access_token(access_token)
-    return redirect("/")
+    return redirect("/auth?fyers_auth=ok")
 
 
 def get_fyers_config() -> dict:
