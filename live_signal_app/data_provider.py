@@ -21,7 +21,7 @@ def _load_csv_fallback(index_key: str) -> pd.DataFrame:
     return pd.read_csv(csv_path)
 
 
-def fetch_latest_candles(index_key: str, lookback_days: int = 10) -> tuple[pd.DataFrame, str]:
+def fetch_latest_candles(index_key: str, lookback_days: int = 10, allow_fyers: bool = True) -> tuple[pd.DataFrame, str]:
     """
     Attempts to fetch recent completed 15m candles from Fyers API v3 using credentials
     in C:\AllIndicesBacktest\.env, falling back cleanly to local CSVs if unavailable.
