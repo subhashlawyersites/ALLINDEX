@@ -68,8 +68,17 @@ def _acquire_fyers_slot() -> bool:
     return True
 
 
+def _is_equity_session_open(now_ist: datetime) -> bool:
+    if now_ist.weekday() >= 5:
+        return False
+    mins = now_ist.hour * 60 + now_ist.minute
+    return (9 * 60 + 15) <= mins <= (15 * 60 + 30)
+
+
 def _merge_live_quote_into_df(df: pd.DataFrame, live_quote: dict, now_ist: datetime) -> pd.DataFrame:
     if df is None or df.empty or not isinstance(live_quote, dict) or live_quote.get("ltp") is None:
+        return df
+    if not _is_equity_session_open(now_ist):
         return df
     try:
         ltp = float(live_quote["ltp"])

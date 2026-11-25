@@ -236,7 +236,8 @@
       <a href="/sensex" class="{{ 'active' if active_nav == 'sensex' else '' }}">SENSEX</a>
       <a href="/banknifty" class="{{ 'active' if active_nav == 'banknifty' else '' }}">BANKNIFTY</a>
       <a href="/finnifty" class="{{ 'active' if active_nav == 'finnifty' else '' }}">FINNIFTY</a>
-      <a href="/auth" class="{{ 'active' if active_nav == 'auth' else '' }}">Fyers Auth</a>
+      <a href="/watchlist">Watchlist</a>
+          <a class="nav-link" href="/auth" class="{{ 'active' if active_nav == 'auth' else '' }}">Fyers Auth</a>
     </nav>
     <div class="meta">
       <span class="badge {{ 'good' if fyers_status and fyers_status.connected else 'warn' }}" id="fyersBadge">
@@ -316,13 +317,32 @@
         setTimeout(() => { osc.stop(); ctx.close(); }, 220);
       } catch (e) {}
     }
+    function isWithinAlertWindowIST() {
+      try {
+        const now = new Date();
+        const parts = new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Asia/Kolkata",
+          weekday: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false
+        }).formatToParts(now);
+        const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
+        if (map.weekday === "Sat" || map.weekday === "Sun") return false;
+        const mins = parseInt(map.hour, 10) * 60 + parseInt(map.minute, 10);
+        return mins >= (9 * 60 + 15) && mins <= (23 * 60 + 35);
+      } catch (e) {
+        return true;
+      }
+    }
+
     function displayAlertBanner(ev, withPopupAndSound = true) {
       const box = document.getElementById("criticalAlertBox");
       if (box) {
         box.style.display = "block";
         box.innerHTML = `<strong>CRITICAL ALERT [${ev.index} &middot; ${ev.type}]:</strong> ${ev.message} <span class="muted">(${ev.time})</span>`;
       }
-      if (withPopupAndSound) {
+      if (withPopupAndSound && !document.hidden && isWithinAlertWindowIST()) {
         playChime();
         showBrowserPopup(`${ev.index} · ${ev.type}`, ev.message);
       }
@@ -356,6 +376,7 @@
     }
 
     async function pollCriticalEvents() {
+      if (document.hidden || !isWithinAlertWindowIST()) return;
       try {
         const res = await fetch("/api/events");
         const data = await res.json();

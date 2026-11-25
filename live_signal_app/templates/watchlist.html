@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}MCX & Index Watchlist (Max 5) - ALLINDEX{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+      <h2 class="mb-1">Near-Month MCX &amp; Index Watchlist</h2>
+      <p class="text-muted mb-0">Select up to <strong>5</strong> instruments. MCX near-month contracts resolve automatically without manual month edits.</p>
+    </div>
+    <div class="text-end">
+      <span class="badge bg-secondary" id="wl-status-badge">Checking...</span>
+      <div class="small text-muted mt-1" id="wl-checked-at"></div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong>Choose up to 5 Instruments</strong>
+        <span class="small text-muted" id="wl-count-label">0 / 5 selected</span>
+      </div>
+      <div class="row g-2" id="wl-selector-grid"></div>
+      <div class="mt-3 d-flex gap-2">
+        <button class="btn btn-primary btn-sm" id="wl-save-btn" type="button">Save Watchlist</button>
+        <button class="btn btn-outline-secondary btn-sm" id="wl-refresh-btn" type="button">Refresh Live Quotes</button>
+      </div>
+      <div class="text-danger small mt-2" id="wl-error-msg"></div>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-bordered table-hover align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Instrument</th>
+          <th>Exchange</th>
+          <th>Resolved Symbol</th>
+          <th>Expiry / Rollover</th>
+          <th>LTP</th>
+          <th>Change</th>
+          <th>Change %</th>
+          <th>Feed</th>
+        </tr>
+      </thead>
+      <tbody id="wl-table-body">
+        <tr><td colspan="8" class="text-center text-muted">Loading watchlist...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function() {
+  const MAX_ITEMS = 5;
+  let catalog = [];
+  let selectedIds = [];
+
+  function renderSelector() {
+    const grid = document.getElementById("wl-selector-grid");
+    const countLbl = document.getElementById("wl-count-label");
+    countLbl.textContent = `${selectedIds.length} / ${MAX_ITEMS} selected`;
+    grid.innerHTML = "";
+
+    catalog.forEach(item => {
+      const checked = selectedIds.includes(item.id);
+      const col = document.createElement("div");
+      col.className = "col-6 col-md-4 col-lg-3";
+      col.innerHTML = `
+        <div class="form-check border rounded p-2">
+          <input class="form-check-input wl-chk" type="checkbox" id="chk_${item.id}" value="${item.id}" ${checked ? "checked" : ""}>
+          <label class="form-check-label small" for="chk_${item.id}">
+            <strong>${item.label}</strong>
+          </label>
+        </div>
+      `;
+      grid.appendChild(col);
+    });
+
+    document.querySelectorAll(".wl-chk").forEach(chk => {
+      chk.addEventListener("change", (ev) => {
+        const errEl = document.getElementById("wl-error-msg");
+        errEl.textContent = "";
+        const val = ev.target.value;
+        if (ev.target.checked) {
+          if (selectedIds.length >= MAX_ITEMS) {
+            ev.target.checked = false;
+            errEl.textContent = `You can select at most ${MAX_ITEMS} instruments at once.`;
+            return;
+          }
+          if (!selectedIds.includes(val)) selectedIds.push(val);
+        } else {
+          selectedIds = selectedIds.filter(x => x !== val);
+        }
+        countLbl.textContent = `${selectedIds.length} / ${MAX_ITEMS} selected`;
+      });
+    });
+  }
+
+  function renderRows(items) {
+    const tbody = document.getElementById("wl-table-body");
+    if (!items || !items.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">No instruments selected.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items.map(it => {
+      const ltp = (it.ltp !== null && it.ltp !== undefined) ? Number(it.ltp).toFixed(2) : "-";
+      const chg = (it.change !== null && it.change !== undefined) ? Number(it.change).toFixed(2) : "-";
+      const chgPct = (it.change_pct !== null && it.change_pct !== undefined) ? `${Number(it.change_pct).toFixed(2)}%` : "-";
+      const expInfo = it.expiry_date ? `${it.expiry_date} (${it.rollover_source})` : (it.rollover_source || "-");
+      return `
+        <tr>
+          <td><strong>${it.label}</strong></td>
+          <td>${it.exchange}</td>
+          <td><code>${it.symbol}</code></td>
+          <td>${expInfo}</td>
+          <td><strong>${ltp}</strong></td>
+          <td>${chg}</td>
+          <td>${chgPct}</td>
+          <td><span class="badge bg-info text-dark">${it.feed_status}</span></td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  async function loadWatchlist(postIds = null) {
+    const opts = postIds
+      ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ selected_ids: postIds }) }
+      : { method: "GET" };
+    const resp = await fetch("/api/watchlist", opts);
+    const data = await resp.json();
+    if (!resp.ok || data.error) {
+      document.getElementById("wl-error-msg").textContent = data.error || "Failed to load watchlist";
+      return;
+    }
+    catalog = data.catalog || [];
+    selectedIds = data.selected_ids || [];
+    renderSelector();
+    renderRows(data.items || []);
+    document.getElementById("wl-checked-at").textContent = `Updated: ${data.checked_at || ""}`;
+    const badge = document.getElementById("wl-status-badge");
+    badge.textContent = data.fyers_connected ? "Fyers Token Active" : "Token Missing / Check /auth";
+    badge.className = data.fyers_connected ? "badge bg-success" : "badge bg-warning text-dark";
+  }
+
+  document.getElementById("wl-save-btn").addEventListener("click", () => loadWatchlist(selectedIds));
+  document.getElementById("wl-refresh-btn").addEventListener("click", () => loadWatchlist(null));
+
+  loadWatchlist(null);
+  setInterval(() => loadWatchlist(null), 15000);
+})();
+</script>
+{% endblock %}

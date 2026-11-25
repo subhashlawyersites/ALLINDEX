@@ -414,5 +414,25 @@ def api_status():
     })
 
 
+
+
+@app.route("/watchlist")
+def watchlist_page():
+    return render_template("watchlist.html")
+
+
+@app.route("/api/watchlist", methods=["GET", "POST"])
+def api_watchlist():
+    from watchlist_manager import MAX_WATCHLIST_ITEMS, fetch_watchlist_quotes
+    selected = None
+    if request.method == "POST":
+        payload = request.get_json(silent=True) or {}
+        raw_ids = payload.get("selected_ids")
+        if isinstance(raw_ids, list) and len(raw_ids) > MAX_WATCHLIST_ITEMS:
+            return jsonify({"error": f"Maximum {MAX_WATCHLIST_ITEMS} instruments allowed."}), 400
+        selected = raw_ids if isinstance(raw_ids, list) else []
+    return jsonify(fetch_watchlist_quotes(selected))
+
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5055, debug=False)
