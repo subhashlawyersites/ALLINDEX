@@ -31,13 +31,20 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
     for key in INDEX_CONFIGS:
         df, src = fetch_latest_candles(key)
         st = evaluate_index_signal(df, key).to_dict()
+        live_q = (df.attrs or {}).get("live_quote") if hasattr(df, "attrs") else {}
+        live_ltp = live_q.get("ltp") if isinstance(live_q, dict) else None
+        st["live_quote"] = live_q or {}
+        st["live_ltp"] = float(live_ltp) if live_ltp is not None else float(st.get("last_close") or 0.0)
+        st["data_source"] = src
 
         last_row = df.iloc[-1] if not df.empty else {}
+        spot_now = st["live_ltp"] if (src == "FYERS_LIVE_15M" and live_ltp is not None) else float(last_row.get("close", st["last_close"]))
+        st["spot_price"] = spot_now
         price_snaps[key] = {
-            "high": float(last_row.get("high", st["last_close"])),
-            "low": float(last_row.get("low", st["last_close"])),
-            "close": float(last_row.get("close", st["last_close"])),
-            "time_str": st["last_bar_time"],
+            "high": max(float(last_row.get("high", spot_now)), spot_now),
+            "low": min(float(last_row.get("low", spot_now)), spot_now),
+            "close": spot_now,
+            "time_str": (live_q.get("updated_ist") if isinstance(live_q, dict) and live_q.get("updated_ist") else st["last_bar_time"]),
         }
 
         if st["avoid_today"]:
@@ -65,11 +72,11 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
             direction=ref_dir,
             entry_price=ref_entry,
             sl_price=ref_sl,
-            current_price=st["last_close"],
+            current_price=st.get("spot_price", st["last_close"]),
         )
         st["strike_ladder"] = build_strike_ladder(
             index_key=k,
-            spot_price=st["last_close"],
+            spot_price=st.get("spot_price", st["last_close"]),
             direction=ref_dir,
         )
 
