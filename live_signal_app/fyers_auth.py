@@ -60,6 +60,69 @@ def save_access_token(access_token: str) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def _get_db_url() -> str:
+    for k in ("DATABASE_URL", "SUPABASE_DB_URL", "POSTGRES_URL", "PG_URL", "DB_URL"):
+        v = (os.getenv(k) or "").strip()
+        if v:
+            return v
+    return ""
+
+
+def _save_token_to_db(client_id: str, token: str, session_date: str, updated_at_ist: str) -> None:
+    url = _get_db_url()
+    if not url or not client_id or not token:
+        return
+    try:
+        import psycopg
+        with psycopg.connect(url, autocommit=True, connect_timeout=5) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "CREATE TABLE IF NOT EXISTS fyers_tokens ("
+                    "client_id TEXT PRIMARY KEY, "
+                    "access_token TEXT NOT NULL, "
+                    "session_date TEXT, "
+                    "updated_at_ist TEXT)"
+                )
+                cur.execute(
+                    "INSERT INTO fyers_tokens (client_id, access_token, session_date, updated_at_ist) "
+                    "VALUES (%s, %s, %s, %s) "
+                    "ON CONFLICT (client_id) DO UPDATE SET "
+                    "access_token = EXCLUDED.access_token, "
+                    "session_date = EXCLUDED.session_date, "
+                    "updated_at_ist = EXCLUDED.updated_at_ist",
+                    (client_id, token, session_date, updated_at_ist),
+                )
+    except Exception:
+        pass
+
+
+def _load_token_from_db(client_id: str) -> str:
+    url = _get_db_url()
+    if not url or not client_id:
+        return ""
+    try:
+        import psycopg
+        with psycopg.connect(url, autocommit=True, connect_timeout=5) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "CREATE TABLE IF NOT EXISTS fyers_tokens ("
+                    "client_id TEXT PRIMARY KEY, "
+                    "access_token TEXT NOT NULL, "
+                    "session_date TEXT, "
+                    "updated_at_ist TEXT)"
+                )
+                cur.execute(
+                    "SELECT access_token FROM fyers_tokens WHERE client_id = %s",
+                    (client_id,),
+                )
+                row = cur.fetchone()
+                if row and row[0]:
+                    return str(row[0]).strip()
+    except Exception:
+        pass
+    return ""
+
+
 def load_access_token() -> str:
     for path in _candidate_token_paths():
         if path.exists():
