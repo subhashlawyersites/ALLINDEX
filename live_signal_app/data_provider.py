@@ -59,7 +59,8 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10) -> tuple[pd.Da
                 df = df.dropna(subset=["epoch"]).drop_duplicates(subset=["epoch"]).sort_values("epoch").reset_index(drop=True)
                 df["timestamp_ist"] = pd.to_datetime(df["epoch"], unit="s", utc=True).dt.tz_convert(IST).dt.strftime("%Y-%m-%d %H:%M:%S%z")
                 return df, "FYERS_LIVE_15M"
-        except Exception:
-            pass
+            print(f"[Fyers history non-ok] {index_key} ({cfg['symbol']}): {resp}")
+        except Exception as exc:
+            print(f"[Fyers history error] {index_key} ({cfg['symbol']}): {exc}")
 
     return _load_csv_fallback(index_key), "LOCAL_CSV_1Y"

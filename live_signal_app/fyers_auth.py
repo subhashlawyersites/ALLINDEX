@@ -48,16 +48,16 @@ def save_access_token(access_token: str) -> None:
 
 
 def load_access_token() -> str:
-    path = _token_file_path()
-    if path.exists():
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            token = (data.get("access_token") or "").strip()
-            if token:
-                os.environ["FYERS_ACCESS_TOKEN"] = token
-                return token
-        except Exception:
-            pass
+    for path in _candidate_token_paths():
+        if path.exists():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                token = (data.get("access_token") or "").strip()
+                if token:
+                    os.environ["FYERS_ACCESS_TOKEN"] = token
+                    return token
+            except Exception:
+                continue
     return (os.getenv("FYERS_ACCESS_TOKEN") or "").strip()
 
 
