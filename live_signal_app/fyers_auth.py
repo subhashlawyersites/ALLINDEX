@@ -58,6 +58,9 @@ def save_access_token(access_token: str) -> None:
     path = _token_file_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    cid = (os.getenv("FYERS_APP_ID") or os.getenv("FYERS_CLIENT_ID") or "").strip()
+    if cid:
+        _save_token_to_db(cid, token, payload["session_date"], payload["saved_at_ist"])
 
 
 def _get_db_url() -> str:
@@ -134,6 +137,12 @@ def load_access_token() -> str:
                     return token
             except Exception:
                 continue
+    cid = (os.getenv("FYERS_APP_ID") or os.getenv("FYERS_CLIENT_ID") or "").strip()
+    if cid:
+        db_tok = _load_token_from_db(cid)
+        if db_tok:
+            os.environ["FYERS_ACCESS_TOKEN"] = db_tok
+            return db_tok
     return (os.getenv("FYERS_ACCESS_TOKEN") or "").strip()
 
 
