@@ -578,5 +578,51 @@
       window.addEventListener("load", () => window.hideSlowLoader(true));
     })();
   </script>
+<script>
+
+  window.triggerLivePoll = async function() {
+    return window.runIdempotentAction("live_status_poll", async () => {
+      try {
+        const res = await fetch("/api/status", { cache: "no-store" });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const activeKey = data.active_feed_index || "NIFTY50";
+        const allottedEl = document.getElementById("topFeedAllottedText");
+        if (allottedEl) allottedEl.textContent = `Live Feed Connection Allotted to ${activeKey}`;
+
+        document.querySelectorAll("[data-topbar-feed]").forEach(btn => {
+          btn.classList.toggle("primary", btn.getAttribute("data-topbar-feed") === activeKey);
+        });
+
+        const idxList = Array.isArray(data.indices) ? data.indices : [];
+        const activeIdx = idxList.find(i => i.index_key === activeKey) || idxList.find(i => i.feed_enabled) || idxList[0];
+        const spotBar = document.getElementById("topActiveFeedSpot");
+        const metaBar = document.getElementById("topActiveFeedMeta");
+        if (activeIdx) {
+          const rawSpot = (activeIdx.spot_price != null) ? activeIdx.spot_price : activeIdx.last_close;
+          const numSpot = Number(rawSpot);
+          if (spotBar) spotBar.textContent = Number.isFinite(numSpot) ? numSpot.toFixed(2) : String(rawSpot ?? "--");
+          if (metaBar) metaBar.textContent = `? ${activeIdx.status || ""} ? ${activeIdx.data_source || ""}`;
+          if (typeof window.syncLiveChartWithIndex === "function" && Number.isFinite(numSpot)) {
+            window.syncLiveChartWithIndex(activeIdx, numSpot, new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }));
+          }
+        }
+
+        if (typeof window.onLiveStatusUpdate === "function") {
+          window.onLiveStatusUpdate(data);
+        }
+        return data;
+      } catch (_) {
+        return null;
+      }
+    });
+  };
+
+  window.triggerLivePoll();
+  setInterval(() => {
+    if (!document.hidden) window.triggerLivePoll();
+  }, 4000);
+
+</script>
 </body>
 </html>

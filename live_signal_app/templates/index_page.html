@@ -457,6 +457,17 @@
   }
 
   window.onLiveStatusUpdate = function(data) {
+    if (data && Array.isArray(data.indices)) {
+      const activeKey = data.active_feed_index || "NIFTY50";
+      const activeItem = data.indices.find(i => i.index_key === activeKey) || data.indices.find(i => i.feed_enabled);
+      const allottedEl = document.getElementById("topFeedAllottedText");
+      if (allottedEl) allottedEl.textContent = `Live Feed Connection Allotted to ${activeKey}`;
+      const spotBar = document.getElementById("topActiveFeedSpot");
+      if (spotBar && activeItem) {
+        const v = Number((activeItem.spot_price != null) ? activeItem.spot_price : activeItem.last_close);
+        if (Number.isFinite(v)) spotBar.textContent = v.toFixed(2);
+      }
+    }
     if (!data || !Array.isArray(data.indices) || typeof IDX_KEY === "undefined") return;
     const idx = data.indices.find(item => item.index_key === IDX_KEY);
     if (!idx) return;
