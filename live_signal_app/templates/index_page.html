@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block content %}
   <div class="toolbar">
     <div>
@@ -26,11 +26,12 @@
     <div class="card">
       <h3 style="margin-top:0;">Live / Latest Signal State</h3>
       <div class="row-kv"><span>Status:</span><strong>{{ state.status }}</strong></div>
-      <div class="row-kv"><span>Last Close:</span><strong>{{ state.last_close }}</strong></div>
-      <div class="row-kv"><span>SMA(2) / SMA(10):</span><strong>{{ state.sma2 }} / {{ state.sma10 }}</strong></div>
-      <div class="row-kv"><span>Armed Direction:</span><strong>{{ state.armed_dir or 'None' }}</strong></div>
-      <div class="row-kv"><span>Entry / SL / Target(0.60R):</span><strong>{{ state.entry_price or '-' }} / {{ state.stop_price or '-' }} / {{ state.target_price or '-' }}</strong></div>
-      <div class="row-kv"><span>Trades Today:</span><strong>{{ state.trades_today }} / {{ rules.max_trades_per_day }}</strong></div>
+      <div class="row-kv"><span>Live / Current Price:</span><strong data-live-price="{{ state.index_key }}">{{ state.spot_price or state.last_close }}</strong></div>
+      <div class="row-kv"><span>Last Close:</span><strong data-last-close="{{ state.index_key }}">{{ state.last_close }}</strong></div>
+      <div class="row-kv"><span>SMA(2) / SMA(10):</span><strong data-sma="{{ state.index_key }}">{{ state.sma2 }} / {{ state.sma10 }}</strong></div>
+      <div class="row-kv"><span>Armed Direction:</span><strong data-armed="{{ state.index_key }}">{{ state.armed_dir or 'None' }}</strong></div>
+      <div class="row-kv"><span>Entry / SL / Target(0.60R):</span><strong data-est="{{ state.index_key }}">{{ state.entry_price or '-' }} / {{ state.stop_price or '-' }} / {{ state.target_price or '-' }}</strong></div>
+      <div class="row-kv"><span>Trades Today:</span><strong data-trades="{{ state.index_key }}">{{ state.trades_today }} / {{ rules.max_trades_per_day }}</strong></div>
       <p class="muted" style="margin-top:8px;">{{ state.status_reason }}</p>
     </div>
 
@@ -453,3 +454,40 @@
   reloadIndexAnalytics(1);
 </script>
 {% endblock %}
+
+
+<script>
+window.onLiveStatusUpdate = function(data) {
+  if (!data || !Array.isArray(data.indices) || typeof IDX_KEY === "undefined") return;
+  const idx = data.indices.find(item => item.index_key === IDX_KEY);
+  if (!idx) return;
+
+  const livePriceEl = document.querySelector(`[data-live-price="${IDX_KEY}"]`);
+  if (livePriceEl) {
+    const val = (idx.spot_price != null) ? idx.spot_price : idx.last_close;
+    livePriceEl.textContent = val;
+  }
+
+  const lastCloseEl = document.querySelector(`[data-last-close="${IDX_KEY}"]`);
+  if (lastCloseEl && idx.last_close != null) lastCloseEl.textContent = idx.last_close;
+
+  const smaEl = document.querySelector(`[data-sma="${IDX_KEY}"]`);
+  if (smaEl) smaEl.textContent = `${idx.sma2} / ${idx.sma10}`;
+
+  const armedEl = document.querySelector(`[data-armed="${IDX_KEY}"]`);
+  if (armedEl) armedEl.textContent = idx.armed_dir || "None";
+
+  const estEl = document.querySelector(`[data-est="${IDX_KEY}"]`);
+  if (estEl) {
+    const e = idx.entry_price ?? "-";
+    const s = idx.stop_price ?? "-";
+    const t = idx.target_price ?? "-";
+    estEl.textContent = `${e} / ${s} / ${t}`;
+  }
+
+  const tradesEl = document.querySelector(`[data-trades="${IDX_KEY}"]`);
+  if (tradesEl && data.rules) {
+    tradesEl.textContent = `${idx.trades_today ?? 0} / ${data.rules.max_trades_per_day ?? 2}`;
+  }
+};
+</script>
