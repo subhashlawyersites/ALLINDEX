@@ -48,8 +48,8 @@
 
     <div class="card">
       <h3 style="margin-top:0;">Exit Levels &amp; Target Ladder (50%–100%)</h3>
-      <div class="row-kv"><span>Progress (-1.0R SL &rarr; +1.0R):</span><strong>{{ state.target_ladder.progress_pct }}%</strong></div>
-      <div class="progress-wrap"><div class="progress-fill" style="width:{{ state.target_ladder.progress_pct }}%;"></div></div>
+      <div class="row-kv"><span>Progress (-1.0R SL &rarr; +1.0R):</span><strong data-idx-progress-pct="{{ state.index_key }}">{{ state.target_ladder.progress_pct }}%</strong></div>
+      <div class="progress-wrap"><div class="progress-fill" data-idx-progress-fill="{{ state.index_key }}" style="width:{{ state.target_ladder.progress_pct }}%;"></div></div>
       <div class="muted" style="margin-bottom:8px;">{{ state.target_ladder.milestone_label }}</div>
       <div class="row-kv"><span>Exit - Stop Loss (SL):</span><strong class="neg">{{ state.monitored_trade.sl_price if state.monitored_trade else (state.stop_price or '-') }}</strong></div>
       <div class="row-kv"><span>Exit - Primary Target (60% / 0.60R):</span><strong class="pos">{{ state.monitored_trade.target_price if state.monitored_trade else (state.target_price or '-') }}</strong></div>
@@ -470,6 +470,17 @@ window.onLiveStatusUpdate = function(data) {
   if (pBtn) {
     pBtn.textContent = idx.feed_enabled ? "FEED RECEIVING (Active)" : "Activate Live Feed (Disable Others)";
     pBtn.classList.toggle("primary", !Boolean(idx.feed_enabled));
+  }
+
+  
+  const liveNum = (idx.spot_price != null) ? idx.spot_price : idx.last_close;
+  const pct = (typeof window.computeLiveProgressPct === "function") ? window.computeLiveProgressPct(idx, liveNum) : Number((idx.target_ladder && idx.target_ladder.progress_pct) || 0);
+  const pPctEl = document.querySelector(`[data-idx-progress-pct="${IDX_KEY}"]`);
+  if (pPctEl) pPctEl.textContent = `${pct}%`;
+  const pFillEl = document.querySelector(`[data-idx-progress-fill="${IDX_KEY}"]`);
+  if (pFillEl) pFillEl.style.width = `${pct}%`;
+  if (typeof window.syncLiveChartWithIndex === "function") {
+    window.syncLiveChartWithIndex(idx, liveNum, new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }));
   }
 
   const livePriceEl = document.querySelector(`[data-live-price="${IDX_KEY}"]`);

@@ -54,8 +54,8 @@
       <div class="row-kv"><span>ATM Strike:</span><strong data-atm="{{ s.index_key }}">{{ s.strike_ladder.atm or '-' }} ({{ s.strike_ladder.direction }})</strong></div>
       <div class="row-kv"><span>Avoid Days:</span><span>{{ s.avoid_weekdays|join(', ') if s.avoid_weekdays else 'None (caution: ' + (s.caution_weekdays|join(', ') or 'Friday') + ')' }}</span></div>
       {% if s.target_ladder.active %}
-      <div class="progress-wrap"><div class="progress-fill" style="width:{{ s.target_ladder.progress_pct }}%;"></div></div>
-      <div class="muted">{{ s.target_ladder.milestone_label }} ({{ s.target_ladder.progress_pct }}%)</div>
+      <div class="progress-wrap"><div class="progress-fill" data-progress-fill="{{ s.index_key }}" style="width:{{ s.target_ladder.progress_pct }}%;"></div></div>
+      <div class="muted" data-progress-label="{{ s.index_key }}">{{ s.target_ladder.milestone_label }} ({{ s.target_ladder.progress_pct }}%)</div>
       {% endif %}
       <p class="muted" style="margin-top:8px;" data-reason="{{ s.index_key }}">{{ s.status_reason }}</p>
       <div class="row-kv" style="margin-top:8px;">
@@ -391,6 +391,16 @@ window.onLiveStatusUpdate = function(data) {
     }
     const reasonEl = document.querySelector(`[data-reason="${idx.index_key}"]`);
     if (reasonEl && idx.status_reason) reasonEl.textContent = idx.status_reason;
+
+    
+    const spotVal = (idx.spot_price != null) ? idx.spot_price : idx.last_close;
+    const pct = (typeof window.computeLiveProgressPct === "function") ? window.computeLiveProgressPct(idx, spotVal) : Number((idx.target_ladder && idx.target_ladder.progress_pct) || 0);
+    const fillEl = document.querySelector(`[data-progress-fill="${idx.index_key}"]`);
+    if (fillEl) fillEl.style.width = `${pct}%`;
+    const progLblEl = document.querySelector(`[data-progress-label="${idx.index_key}"]`);
+    if (progLblEl && idx.target_ladder) {
+      progLblEl.textContent = `${idx.target_ladder.milestone_label || "Target Progress"} (${pct}%)`;
+    }
 
     const spotSmaEl = document.querySelector(`[data-spot-sma="${idx.index_key}"]`);
     if (spotSmaEl) {

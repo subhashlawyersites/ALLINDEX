@@ -140,11 +140,12 @@
 </head>
 <body>
 
-<div id="topLiveFeedBar" style="background:rgba(15,23,42,0.92); border-bottom:1px solid rgba(148,163,184,0.2); padding:8px 16px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; font-size:13px;">
+<div id="topLiveFeedBar" role="status" style="background:rgba(15,23,42,0.95); border-bottom:1px solid rgba(56,189,248,0.35); padding:9px 16px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; font-size:13px;">
   <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-    <span class="badge good">EXCLUSIVE FEED</span>
-    <span>Active Live Feed: <strong id="topActiveFeedName">{{ active_feed_index or 'NIFTY50' }}</strong></span>
-    <span class="muted" id="topActiveFeedSpot"></span>
+    <span class="badge good" id="topFeedAlertBadge">LIVE ALLOTTED</span>
+    <strong id="topFeedAllottedText">Live Feed Connection Allotted to {{ active_feed_index or 'NIFTY50' }}</strong>
+    <span>? Live Value: <strong id="topActiveFeedSpot" class="pos">--</strong></span>
+    <span class="muted" id="topActiveFeedMeta"></span>
   </div>
   <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
     <button type="button" class="btn" data-topbar-feed="NIFTY50" onclick="window.switchLiveFeedIndex && window.switchLiveFeedIndex('NIFTY50')">NIFTY 50</button>
@@ -342,6 +343,62 @@ window.switchLiveFeedIndex = async function(indexKey) {
       if (window.triggerLivePoll) await window.triggerLivePoll();
     }
   } catch (_) {}
+};
+</script>
+
+
+<script>
+window.computeLiveProgressPct = function(idx, spotVal) {
+  const tl = (idx && idx.target_ladder) ? idx.target_ladder : null;
+  const price = Number(spotVal);
+  if (tl && Number.isFinite(price)) {
+    const sl = Number(tl.sl);
+    const tgt = Number(tl.target != null ? tl.target : idx.target_price);
+    if (Number.isFinite(sl) && Number.isFinite(tgt) && tgt !== sl) {
+      const pct = ((price - sl) / (tgt - sl)) * 100;
+      return Math.max(0, Math.min(100, Number(pct.toFixed(1))));
+    }
+  }
+  if (tl && tl.progress_pct != null && Number.isFinite(Number(tl.progress_pct))) {
+    return Math.max(0, Math.min(100, Number(Number(tl.progress_pct).toFixed(1))));
+  }
+  return 0;
+};
+
+window.syncLiveChartWithIndex = function(idx, spotVal, timeLabel) {
+  const price = Number(spotVal);
+  if (!idx || !Number.isFinite(price)) return;
+  const charts = [];
+  if (window.Chart && typeof window.Chart.getChart === "function") {
+    document.querySelectorAll("canvas").forEach(c => {
+      const ch = window.Chart.getChart(c);
+      if (ch) charts.push(ch);
+    });
+  }
+  if (window.livePriceChart && !charts.includes(window.livePriceChart)) {
+    charts.push(window.livePriceChart);
+  }
+  charts.forEach(ch => {
+    try {
+      const ds = ch.data && ch.data.datasets && ch.data.datasets[0];
+      if (!ds || !Array.isArray(ds.data)) return;
+      const lbl = timeLabel || new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
+      if (Array.isArray(ch.data.labels)) {
+        const lastLbl = ch.data.labels[ch.data.labels.length - 1];
+        if (lastLbl === lbl && ds.data.length > 0) {
+          ds.data[ds.data.length - 1] = price;
+        } else {
+          ch.data.labels.push(lbl);
+          ds.data.push(price);
+          if (ch.data.labels.length > 60) ch.data.labels.shift();
+          if (ds.data.length > 60) ds.data.shift();
+        }
+      } else {
+        ds.data[ds.data.length - 1] = price;
+      }
+      ch.update("none");
+    } catch (_) {}
+  });
 };
 </script>
 
