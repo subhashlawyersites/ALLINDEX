@@ -180,20 +180,22 @@ def test_fyers_connection() -> dict:
     token = load_access_token()
     if not creds["client_id"] or not token:
         return {"ok": False, "connected": False, "message": "Missing FYERS_APP_ID or FYERS_ACCESS_TOKEN"}
-    auth_token = token.split(":", 1)[-1].strip()
+    raw_tok = token.strip()
+    clean_tok = raw_tok.split(":", 1)[-1].strip()
+    meta = f"[len={len(clean_tok)}, dots={clean_tok.count('.')}, sec_len={len(creds['secret_key'])}]"
     try:
         client = fyersModel.FyersModel(
             client_id=creds["client_id"],
             is_async=False,
-            token=auth_token,
+            token=clean_tok,
             log_path="",
         )
         profile = client.get_profile()
         if isinstance(profile, dict) and profile.get("s") == "ok":
-            return {"ok": True, "connected": True, "message": "Fyers connection active", "profile": profile.get("data", {})}
-        return {"ok": False, "connected": False, "message": f"Fyers check failed: {profile}"}
+            return {"ok": True, "connected": True, "message": f"Fyers connection active {meta}", "profile": profile.get("data", {})}
+        return {"ok": False, "connected": False, "message": f"Fyers check failed {meta}: {profile}"}
     except Exception as exc:
-        return {"ok": False, "connected": False, "message": f"Fyers check error: {exc}"}
+        return {"ok": False, "connected": False, "message": f"Fyers check error {meta}: {exc}"}
 
 
 def get_fyers_client(log_path: str = ""):
