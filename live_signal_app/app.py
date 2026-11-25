@@ -1,5 +1,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from pathlib import Path
+import json
 from flask import Flask, jsonify, render_template, request
 from fyers_auth import fyers_auth_bp
 import pandas as pd
@@ -23,19 +25,63 @@ app = Flask(__name__)
 app.register_blueprint(fyers_auth_bp)
 
 
+
+FEED_STATE_FILE = Path(__file__).resolve().parent / ".index_feed_state.json"
+DEFAULT_FEED_STATE = {
+    "NIFTY50": True,
+    "SENSEX": False,
+    "BANKNIFTY": False,
+    "FINNIFTY": False,
+}
+
+
+def get_feed_states() -> dict[str, bool]:
+    state = dict(DEFAULT_FEED_STATE)
+    if FEED_STATE_FILE.exists():
+        try:
+            saved = json.loads(FEED_STATE_FILE.read_text(encoding="utf-8"))
+            if isinstance(saved, dict):
+                for k in DEFAULT_FEED_STATE:
+                    if k in saved:
+                        state[k] = bool(saved[k])
+        except Exception:
+            pass
+    return state
+
+
+def set_index_feed_enabled(index_key: str, enabled: bool) -> dict[str, bool]:
+    state = get_feed_states()
+    k = index_key.upper()
+    if k in state:
+        state[k] = bool(enabled)
+        try:
+            FEED_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            FEED_STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+    return state
+
+
 def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
     states = []
     sources = {}
     price_snaps = {}
 
+    feed_map = get_feed_states()
     for key in INDEX_CONFIGS:
-        df, src = fetch_latest_candles(key)
+        feed_on = feed_map.get(key, False)
+        if feed_on:
+            df, src = fetch_latest_candles(key)
+        else:
+            df, raw_src = fetch_latest_candles(key, allow_fyers=False)
+            src = f"PAUSED ({raw_src})"
         st = evaluate_index_signal(df, key).to_dict()
         live_q = (df.attrs or {}).get("live_quote") if hasattr(df, "attrs") else {}
         live_ltp = live_q.get("ltp") if isinstance(live_q, dict) else None
         st["live_quote"] = live_q or {}
         st["live_ltp"] = float(live_ltp) if live_ltp is not None else float(st.get("last_close") or 0.0)
         st["data_source"] = src
+        st["feed_enabled"] = feed_on
 
         last_row = df.iloc[-1] if not df.empty else {}
         spot_now = st["live_ltp"] if (src == "FYERS_LIVE_15M" and live_ltp is not None) else float(last_row.get("close", st["last_close"]))
@@ -277,6 +323,27 @@ def api_analytics(scope: str):
     )
     return jsonify(data)
 
+
+
+
+@app.route("/api/feed/state", methods=["GET"])
+def api_feed_state():
+    return jsonify({"ok": True, "feeds": get_feed_states()})
+
+
+@app.route("/api/feed/<index_slug>/toggle", methods=["POST"])
+def api_feed_toggle(index_slug: str):
+    key = index_slug.upper()
+    if key not in INDEX_CONFIGS:
+        return jsonify({"ok": False, "error": f"Unknown index: {index_slug}"}), 404
+    body = request.get_json(silent=True) or {}
+    current = get_feed_states()
+    if "enabled" in body:
+        target = bool(body["enabled"])
+    else:
+        target = not current.get(key, False)
+    updated = set_index_feed_enabled(key, target)
+    return jsonify({"ok": True, "index_key": key, "feed_enabled": updated[key], "feeds": updated})
 
 @app.route("/api/status")
 def api_status():

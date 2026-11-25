@@ -30,7 +30,7 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10) -> tuple[pd.Da
     client_id = (os.getenv("FYERS_APP_ID") or os.getenv("FYERS_CLIENT_ID") or "").strip()
     access_token = (load_access_token() or os.getenv("FYERS_ACCESS_TOKEN") or "").strip()
 
-    if client_id and access_token:
+    if allow_fyers and client_id and access_token:
         try:
             from fyers_apiv3 import fyersModel
 

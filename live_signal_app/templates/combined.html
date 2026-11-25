@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block content %}
   <div class="toolbar">
     <div>
@@ -37,7 +37,13 @@
       <div class="progress-wrap"><div class="progress-fill" style="width:{{ s.target_ladder.progress_pct }}%;"></div></div>
       <div class="muted">{{ s.target_ladder.milestone_label }} ({{ s.target_ladder.progress_pct }}%)</div>
       {% endif %}
-      <p class="muted" style="margin-top:8px;">{{ s.status_reason }}</p>
+      <p class="muted" style="margin-top:8px;" data-reason="{{ s.index_key }}">{{ s.status_reason }}</p>
+      <div class="row-kv" style="margin-top:8px;">
+        <span>Fyers Feed:</span>
+        <button class="btn {{ 'primary' if s.feed_enabled else '' }}" type="button" data-feed-btn="{{ s.index_key }}" onclick="toggleIndexFeed('{{ s.index_key }}')">
+          {{ 'FEED ON (Auto)' if s.feed_enabled else 'FEED OFF (Paused)' }}
+        </button>
+      </div>
       <a href="/{{ s.index_key|lower }}" class="btn" style="display:inline-block; text-decoration:none; margin-top:4px;">Open {{ s.index_key }}</a>
     </div>
     {% endfor %}
@@ -309,3 +315,34 @@
   reloadAnalytics(1);
 </script>
 {% endblock %}
+
+
+<script>
+window.toggleIndexFeed = async function(indexKey) {
+  try {
+    const res = await fetch(`/api/feed/${encodeURIComponent(indexKey.toLowerCase())}/toggle`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    if (res.ok && window.triggerLivePoll) {
+      await window.triggerLivePoll();
+    }
+  } catch (_) {}
+};
+
+window.onLiveStatusUpdate = function(data) {
+  if (!data || !Array.isArray(data.indices)) return;
+  data.indices.forEach(idx => {
+    const btn = document.querySelector(`[data-feed-btn="${idx.index_key}"]`);
+    if (btn) {
+      btn.textContent = idx.feed_enabled ? "FEED ON (Auto)" : "FEED OFF (Paused)";
+      btn.classList.toggle("primary", Boolean(idx.feed_enabled));
+    }
+    const reasonEl = document.querySelector(`[data-reason="${idx.index_key}"]`);
+    if (reasonEl && idx.status_reason) {
+      reasonEl.textContent = idx.status_reason;
+    }
+  });
+};
+</script>

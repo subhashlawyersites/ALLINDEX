@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
@@ -157,7 +157,15 @@
       <button class="btn" id="popupBtn" onclick="requestPopupPermission()">Popups: CHECK</button>
       <button class="btn" onclick="triggerTestAlert()">Test Alert</button>
       <span>{{ now_str }}</span>
-      <button class="btn" onclick="location.reload()">Refresh</button>
+      <button class="btn" id="manualRefreshBtn" type="button" onclick="window.triggerLivePoll && window.triggerLivePoll()">Refresh Now</button>
+      <button class="btn" id="autoPollToggleBtn" type="button" onclick="window.toggleAutoPoll && window.toggleAutoPoll()">Auto: ON (10s)</button>
+      <select id="autoPollIntervalSelect" class="ctrl" style="width:auto;" onchange="window.changeAutoPollInterval && window.changeAutoPollInterval(this.value)">
+        <option value="5000">5s</option>
+        <option value="10000" selected>10s</option>
+        <option value="15000">15s</option>
+        <option value="30000">30s</option>
+        <option value="60000">60s</option>
+      </select>
       <button class="btn" onclick="toggleTheme()">Theme</button>
     </div>
   </header>
@@ -289,5 +297,71 @@
     setInterval(pollCriticalEvents, 20000);
   </script>
   {% block scripts %}{% endblock %}
+
+<script>
+(function() {
+  let autoPollEnabled = true;
+  let pollIntervalMs = 10000;
+  let pollTimer = null;
+  let pollInFlight = false;
+
+  function updateAutoPollButton() {
+    const btn = document.getElementById("autoPollToggleBtn");
+    if (btn) {
+      btn.textContent = autoPollEnabled ? `Auto: ON (${Math.round(pollIntervalMs / 1000)}s)` : "Auto: OFF";
+    }
+  }
+
+  async function runLivePoll() {
+    if (pollInFlight) return;
+    pollInFlight = true;
+    try {
+      const res = await fetch("/api/status", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.updated_ist) {
+        document.querySelectorAll("[data-live-clock]").forEach(el => { el.textContent = data.updated_ist; });
+      }
+      if (typeof window.onLiveStatusUpdate === "function") {
+        window.onLiveStatusUpdate(data);
+      }
+    } catch (_) {
+    } finally {
+      pollInFlight = false;
+    }
+  }
+
+  function resetPollTimer() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    updateAutoPollButton();
+    if (autoPollEnabled) {
+      pollTimer = setInterval(runLivePoll, pollIntervalMs);
+    }
+  }
+
+  window.toggleAutoPoll = function() {
+    autoPollEnabled = !autoPollEnabled;
+    resetPollTimer();
+  };
+
+  window.changeAutoPollInterval = function(val) {
+    const parsed = parseInt(val, 10);
+    if (!Number.isNaN(parsed) && parsed >= 3000) {
+      pollIntervalMs = parsed;
+      resetPollTimer();
+    }
+  };
+
+  window.triggerLivePoll = runLivePoll;
+  document.addEventListener("DOMContentLoaded", () => {
+    resetPollTimer();
+    runLivePoll();
+  });
+})();
+</script>
+
 </body>
 </html>
