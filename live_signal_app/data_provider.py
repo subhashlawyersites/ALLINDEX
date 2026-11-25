@@ -70,7 +70,7 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10, allow_fyers: b
             rate_limited = now_mono < _RATE_LIMIT_UNTIL
 
         if rate_limited and cached_hist is not None:
-            df_cached, src_cached = cached_hist
+            _, df_cached, src_cached = cached_hist
             df_out = df_cached.copy()
             if cached_quote is not None and cached_quote[1]:
                 df_out.attrs["live_quote"] = dict(cached_quote[1])
