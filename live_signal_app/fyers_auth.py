@@ -117,6 +117,7 @@ def save_or_authorize_fyers(
     redirect_uri: str = "",
     auth_code: str = "",
     access_token: str = "",
+    direct_token: str = "",
 ) -> dict:
     creds = get_fyers_credentials()
     cid = (client_id or creds["client_id"] or "").strip()
@@ -131,7 +132,7 @@ def save_or_authorize_fyers(
     if ruri:
         os.environ["FYERS_REDIRECT_URI"] = ruri
 
-    tok = (access_token or "").strip()
+    tok = (direct_token or access_token or "").strip()
     code = (auth_code or "").strip()
 
     if code and not tok:
