@@ -311,5 +311,39 @@
 
 
 
+
+<script>
+window.switchLiveFeedIndex = async function(indexKey) {
+  if (!indexKey) return;
+  const k = String(indexKey).trim().toUpperCase();
+  const lbl = document.getElementById("topActiveFeedName");
+  if (lbl) lbl.textContent = `${k} (switching...)`;
+  try {
+    const res = await fetch("/api/feed/active", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ index_key: k })
+    });
+    const out = await res.json().catch(() => ({}));
+    if (res.ok && out.active_index) {
+      if (lbl) lbl.textContent = out.active_index;
+      document.querySelectorAll("[data-topbar-feed]").forEach(btn => {
+        btn.classList.toggle("primary", btn.getAttribute("data-topbar-feed") === out.active_index);
+      });
+      if (typeof window.onLiveStatusUpdate === "function") {
+        window.onLiveStatusUpdate({
+          active_feed_index: out.active_index,
+          indices: ["NIFTY50", "SENSEX", "BANKNIFTY", "FINNIFTY"].map(sym => ({
+            index_key: sym,
+            feed_enabled: sym === out.active_index
+          }))
+        });
+      }
+      if (window.triggerLivePoll) await window.triggerLivePoll();
+    }
+  } catch (_) {}
+};
+</script>
+
 </body>
 </html>

@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -67,6 +68,29 @@ def _merge_live_quote_into_df(df: pd.DataFrame, live_quote: dict, now_ist: datet
         return out
     except Exception:
         return df
+
+
+
+HISTORY_DISK_CACHE_FILE = DATA_DIR / "fyers_history_cache.json"
+
+
+def _load_disk_history_cache() -> dict:
+    if HISTORY_DISK_CACHE_FILE.exists():
+        try:
+            data = json.loads(HISTORY_DISK_CACHE_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+    return {}
+
+
+def _save_disk_history_cache(cache_obj: dict) -> None:
+    try:
+        HISTORY_DISK_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        HISTORY_DISK_CACHE_FILE.write_text(json.dumps(cache_obj), encoding="utf-8")
+    except Exception:
+        pass
 
 
 def _load_csv_fallback(index_key: str) -> pd.DataFrame:

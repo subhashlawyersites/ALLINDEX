@@ -62,6 +62,12 @@
         <span>Feed Status:</span>
         <strong data-feed-status="{{ s.index_key }}" class="{{ 'pos' if s.feed_enabled else 'muted' }}">{{ 'FEED RECEIVING' if s.feed_enabled else 'FEED BLOCKED TEMPORARILY' }}</strong>
       </div>
+      <div class="row-kv" style="margin-top:8px;">
+        <span>Feed Control:</span>
+        <button type="button" class="btn {{ 'primary' if s.feed_enabled else '' }}" onclick="window.switchLiveFeedIndex('{{ s.index_key }}')">
+          {{ 'FEED RECEIVING' if s.feed_enabled else 'Switch Feed to ' + s.index_key }}
+        </button>
+      </div>
       <a href="/{{ s.index_key|lower }}" class="btn" style="display:inline-block; text-decoration:none; margin-top:4px;">Open {{ s.index_key }}</a>
     </div>
     {% endfor %}
