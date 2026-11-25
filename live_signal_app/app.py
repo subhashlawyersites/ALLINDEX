@@ -1,6 +1,7 @@
 ﻿from datetime import datetime
 from zoneinfo import ZoneInfo
 from flask import Flask, jsonify, render_template, request
+from fyers_auth import fyers_auth_bp
 import pandas as pd
 from analytics_data import build_historical_analytics
 from data_provider import fetch_latest_candles
@@ -19,6 +20,7 @@ from trade_monitor import (
 IST = ZoneInfo("Asia/Kolkata")
 
 app = Flask(__name__)
+app.register_blueprint(fyers_auth_bp)
 
 
 def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:

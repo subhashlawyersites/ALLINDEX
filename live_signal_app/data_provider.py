@@ -31,7 +31,8 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10) -> tuple[pd.Da
 
     if client_id and access_token:
         try:
-            from fyers_apiv3 import fyersModel
+            from fyers_auth import load_access_token
+from fyers_apiv3 import fyersModel
 
             auth_token = access_token if ":" in access_token else f"{client_id}:{access_token}"
             fyers = fyersModel.FyersModel(client_id=client_id, is_async=False, token=auth_token, log_path=str(DATA_DIR))
