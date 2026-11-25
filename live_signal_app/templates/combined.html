@@ -6,7 +6,7 @@
       <p class="muted" style="margin:4px 0;">Live signals, target progress, critical alerts, multi-index comparison, and historical charts.</p>
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
-      <label class="muted">Rule Set:</label>
+      <label class="muted" for="modeSelect">Rule Set:</label>
       <select id="modeSelect" class="ctrl" onchange="reloadAnalytics(1)">
         <option value="refined" selected>Refined (&lt;=14:00, No Bad Slots, Skip Bad Index-Days)</option>
         <option value="baseline">Baseline (Mon-Fri Unfiltered up to 15:14)</option>
@@ -15,60 +15,57 @@
   </div>
 
   <div class="grid">
-    
-  <div class="card" style="margin-bottom:14px;">
-    <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px;">
-      <div>
-        <strong>Select Active Live Feed Index (Single Exclusive Feed to Save Fyers Quota):</strong>
-        <span class="muted" style="margin-left:8px;">Active: <strong id="activeFeedLabel">{{ active_feed_index or 'NIFTY50' }}</strong></span>
-      </div>
-      <div style="display:flex; flex-wrap:wrap; gap:8px;">
-        {% for s in states %}
-          <button type="button"
-                  class="btn {{ 'primary' if s.feed_enabled else '' }}"
-                  data-select-feed="{{ s.index_key }}"
-                  onclick="selectExclusiveFeed('{{ s.index_key }}')">
-            {{ s.index_key }}: {{ 'FEED RECEIVING' if s.feed_enabled else 'Activate Feed' }}
-          </button>
-        {% endfor %}
-      </div>
-    </div>
-  </div>
-
-  {% for s in states %}
+    {% for s in states %}
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h2 style="margin:0; font-size:1.12rem;"><a href="/{{ s.index_key|lower }}" style="color:var(--accent); text-decoration:none;">{{ s.index_name }}</a></h2>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <h2 style="margin:0; font-size:1.12rem;">
+          <a href="/{{ s.index_key|lower }}" style="color:var(--accent); text-decoration:none;">{{ s.index_name }}</a>
+        </h2>
         {% if s.avoid_today or s.gap_excluded or s.status.startswith('BLOCKED') %}
-          <span class="badge bad">{{ s.status }}</span>
+          <span class="badge bad" data-status-badge="{{ s.index_key }}">{{ s.status }}</span>
         {% elif s.status.startswith('CONFIRMED') %}
-          <span class="badge good">{{ s.status }}</span>
+          <span class="badge good" data-status-badge="{{ s.index_key }}">{{ s.status }}</span>
         {% elif s.status.startswith('ARMED') %}
-          <span class="badge warn">{{ s.status }}</span>
+          <span class="badge warn" data-status-badge="{{ s.index_key }}">{{ s.status }}</span>
         {% else %}
-          <span class="badge">{{ s.status }}</span>
+          <span class="badge" data-status-badge="{{ s.index_key }}">{{ s.status }}</span>
         {% endif %}
       </div>
       <p class="muted" style="margin:6px 0 8px;">{{ s.session_date }} ({{ s.weekday }}) | Bar {{ s.last_bar_time }} | {{ sources[s.index_key] }}</p>
-      <div class="row-kv"><span>Spot / SMA2 / SMA10:</span><strong>{{ s.last_close }} / {{ s.sma2 }} / {{ s.sma10 }}</strong></div>
-      <div class="row-kv"><span>ATM Strike:</span><strong data-atm="{{ s.index_key }}">{{ s.strike_ladder.atm or '-' }} ({{ s.strike_ladder.direction }})</strong></div>
-      <div class="row-kv"><span>Avoid Days:</span><span>{{ s.avoid_weekdays|join(', ') if s.avoid_weekdays else 'None (caution: ' + (s.caution_weekdays|join(', ') or 'Friday') + ')' }}</span></div>
+      <div class="row-kv">
+        <span>Spot / SMA2 / SMA10:</span>
+        <strong data-spot-sma="{{ s.index_key }}">{{ s.spot_price or s.last_close }} / {{ s.sma2 }} / {{ s.sma10 }}</strong>
+      </div>
+      <div class="row-kv">
+        <span>ATM Strike:</span>
+        <strong data-atm="{{ s.index_key }}">{{ s.strike_ladder.atm or '-' }} ({{ s.strike_ladder.direction }})</strong>
+      </div>
+      <div class="row-kv">
+        <span>Avoid Days:</span>
+        <span>{{ s.avoid_weekdays|join(', ') if s.avoid_weekdays else 'None (caution: ' + (s.caution_weekdays|join(', ') or 'Friday') + ')' }}</span>
+      </div>
       {% if s.target_ladder.active %}
-      <div class="progress-wrap"><div class="progress-fill" data-progress-fill="{{ s.index_key }}" style="width:{{ s.target_ladder.progress_pct }}%;"></div></div>
+      <div class="progress-wrap">
+        <div class="progress-fill" data-progress-fill="{{ s.index_key }}" style="width:{{ s.target_ladder.progress_pct }}%;"></div>
+      </div>
       <div class="muted" data-progress-label="{{ s.index_key }}">{{ s.target_ladder.milestone_label }} ({{ s.target_ladder.progress_pct }}%)</div>
       {% endif %}
       <p class="muted" style="margin-top:8px;" data-reason="{{ s.index_key }}">{{ s.status_reason }}</p>
       <div class="row-kv" style="margin-top:8px;">
         <span>Feed Status:</span>
-        <strong data-feed-status="{{ s.index_key }}" class="{{ 'pos' if s.feed_enabled else 'muted' }}">{{ 'FEED RECEIVING' if s.feed_enabled else 'FEED BLOCKED TEMPORARILY' }}</strong>
+        <strong data-feed-status="{{ s.index_key }}" class="{{ 'pos' if s.feed_enabled else 'muted' }}">
+          {{ 'FEED RECEIVING' if s.feed_enabled else 'FEED BLOCKED TEMPORARILY' }}
+        </strong>
       </div>
-      <div class="row-kv" style="margin-top:8px;">
-        <span>Feed Control:</span>
-        <button type="button" class="btn {{ 'primary' if s.feed_enabled else '' }}" onclick="window.switchLiveFeedIndex('{{ s.index_key }}')">
+      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
+        <button type="button"
+                class="btn {{ 'primary' if s.feed_enabled else '' }}"
+                data-select-feed="{{ s.index_key }}"
+                onclick="window.switchLiveFeedIndex && window.switchLiveFeedIndex('{{ s.index_key }}')">
           {{ 'FEED RECEIVING' if s.feed_enabled else 'Switch Feed to ' + s.index_key }}
         </button>
+        <a href="/{{ s.index_key|lower }}" class="btn" style="text-decoration:none;">Open {{ s.index_key }}</a>
       </div>
-      <a href="/{{ s.index_key|lower }}" class="btn" style="display:inline-block; text-decoration:none; margin-top:4px;">Open {{ s.index_key }}</a>
     </div>
     {% endfor %}
   </div>
@@ -184,8 +181,8 @@
     <div class="toolbar" style="margin-top:12px;">
       <span class="muted" id="pageInfo">Page 1</span>
       <div style="display:flex; gap:8px;">
-        <button class="btn" id="prevBtn" onclick="changePage(-1)">Prev</button>
-        <button class="btn" id="nextBtn" onclick="changePage(1)">Next</button>
+        <button class="btn" type="button" id="prevBtn" onclick="changePage(-1)">Prev</button>
+        <button class="btn" type="button" id="nextBtn" onclick="changePage(1)">Next</button>
       </div>
     </div>
   </div>
@@ -336,81 +333,56 @@
     if (next >= 1 && next <= totalPages) reloadAnalytics(next);
   }
 
+  window.onLiveStatusUpdate = function(data) {
+    if (!data || !Array.isArray(data.indices)) return;
+    data.indices.forEach(idx => {
+      const selBtn = document.querySelector(`[data-select-feed="${idx.index_key}"]`);
+      if (selBtn) {
+        selBtn.textContent = idx.feed_enabled ? "FEED RECEIVING" : `Switch Feed to ${idx.index_key}`;
+        selBtn.classList.toggle("primary", Boolean(idx.feed_enabled));
+      }
+      const feedSt = document.querySelector(`[data-feed-status="${idx.index_key}"]`);
+      if (feedSt) {
+        feedSt.textContent = idx.feed_enabled ? "FEED RECEIVING" : "FEED BLOCKED TEMPORARILY";
+        feedSt.className = idx.feed_enabled ? "pos" : "muted";
+      }
+      const badgeEl = document.querySelector(`[data-status-badge="${idx.index_key}"]`);
+      if (badgeEl && idx.status) {
+        badgeEl.textContent = idx.status;
+        badgeEl.className = "badge";
+        if (idx.avoid_today || idx.gap_excluded || String(idx.status).startsWith("BLOCKED")) {
+          badgeEl.classList.add("bad");
+        } else if (String(idx.status).startsWith("CONFIRMED")) {
+          badgeEl.classList.add("good");
+        } else if (String(idx.status).startsWith("ARMED")) {
+          badgeEl.classList.add("warn");
+        }
+      }
+      const reasonEl = document.querySelector(`[data-reason="${idx.index_key}"]`);
+      if (reasonEl && idx.status_reason) reasonEl.textContent = idx.status_reason;
+
+      const spotVal = (idx.spot_price != null) ? idx.spot_price : idx.last_close;
+      const pct = (typeof window.computeLiveProgressPct === "function")
+        ? window.computeLiveProgressPct(idx, spotVal)
+        : Number((idx.target_ladder && idx.target_ladder.progress_pct) || 0);
+      const fillEl = document.querySelector(`[data-progress-fill="${idx.index_key}"]`);
+      if (fillEl) fillEl.style.width = `${pct}%`;
+      const progLblEl = document.querySelector(`[data-progress-label="${idx.index_key}"]`);
+      if (progLblEl && idx.target_ladder) {
+        progLblEl.textContent = `${idx.target_ladder.milestone_label || "Target Progress"} (${pct}%)`;
+      }
+
+      const spotSmaEl = document.querySelector(`[data-spot-sma="${idx.index_key}"]`);
+      if (spotSmaEl) {
+        spotSmaEl.textContent = `${spotVal} / ${idx.sma2} / ${idx.sma10}`;
+      }
+      const atmEl = document.querySelector(`[data-atm="${idx.index_key}"]`);
+      if (atmEl && idx.strike_ladder) {
+        atmEl.textContent = `${idx.strike_ladder.atm || '-'} (${idx.strike_ladder.direction || 'CALL'})`;
+      }
+    });
+  };
+
   reloadAnalytics(1);
 </script>
 {% endblock %}
-
-
-
-
-
-
-
-<script>
-window.selectExclusiveFeed = async function(indexKey) {
-  try {
-    const res = await fetch("/api/feed/active", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ index_key: indexKey })
-    });
-    if (res.ok && window.triggerLivePoll) {
-      await window.triggerLivePoll();
-    }
-  } catch (_) {}
-};
-
-window.onLiveStatusUpdate = function(data) {
-  if (!data || !Array.isArray(data.indices)) return;
-  const activeItem = data.indices.find(i => i.feed_enabled);
-  const activeLbl = document.getElementById("activeFeedLabel");
-  if (activeLbl && activeItem) activeLbl.textContent = activeItem.index_key;
-
-  data.indices.forEach(idx => {
-    const selBtn = document.querySelector(`[data-select-feed="${idx.index_key}"]`);
-    if (selBtn) {
-      selBtn.textContent = idx.feed_enabled ? `${idx.index_key}: FEED RECEIVING` : `Activate ${idx.index_key}`;
-      selBtn.classList.toggle("primary", Boolean(idx.feed_enabled));
-    }
-    const feedSt = document.querySelector(`[data-feed-status="${idx.index_key}"]`);
-    if (feedSt) {
-      feedSt.textContent = idx.feed_enabled ? "FEED RECEIVING" : "FEED BLOCKED TEMPORARILY";
-      feedSt.className = idx.feed_enabled ? "pos" : "muted";
-    }
-    const badgeEl = document.querySelector(`[data-status-badge="${idx.index_key}"]`);
-    if (badgeEl && idx.status) {
-      badgeEl.textContent = idx.status;
-      badgeEl.className = "badge";
-      if (idx.avoid_today || idx.gap_excluded || String(idx.status).startsWith("BLOCKED")) {
-        badgeEl.classList.add("bad");
-      } else if (String(idx.status).startsWith("CONFIRMED")) {
-        badgeEl.classList.add("good");
-      } else if (String(idx.status).startsWith("ARMED")) {
-        badgeEl.classList.add("warn");
-      }
-    }
-    const reasonEl = document.querySelector(`[data-reason="${idx.index_key}"]`);
-    if (reasonEl && idx.status_reason) reasonEl.textContent = idx.status_reason;
-
-    
-    const spotVal = (idx.spot_price != null) ? idx.spot_price : idx.last_close;
-    const pct = (typeof window.computeLiveProgressPct === "function") ? window.computeLiveProgressPct(idx, spotVal) : Number((idx.target_ladder && idx.target_ladder.progress_pct) || 0);
-    const fillEl = document.querySelector(`[data-progress-fill="${idx.index_key}"]`);
-    if (fillEl) fillEl.style.width = `${pct}%`;
-    const progLblEl = document.querySelector(`[data-progress-label="${idx.index_key}"]`);
-    if (progLblEl && idx.target_ladder) {
-      progLblEl.textContent = `${idx.target_ladder.milestone_label || "Target Progress"} (${pct}%)`;
-    }
-
-    const spotSmaEl = document.querySelector(`[data-spot-sma="${idx.index_key}"]`);
-    if (spotSmaEl) {
-      const spotVal = (idx.spot_price != null) ? idx.spot_price : idx.last_close;
-      spotSmaEl.textContent = `${spotVal} / ${idx.sma2} / ${idx.sma10}`;
-    }
-    const atmEl = document.querySelector(`[data-atm="${idx.index_key}"]`);
-    if (atmEl && idx.strike_ladder) {
-      atmEl.textContent = `${idx.strike_ladder.atm || '-'} (${idx.strike_ladder.direction || 'CALL'})`;
-    }
-  });
-};
-</script>

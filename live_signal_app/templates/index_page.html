@@ -5,16 +5,22 @@
       <h1 style="margin:0;">{{ state.index_name }} ({{ state.symbol }})</h1>
       <p class="muted" style="margin:4px 0;">Session {{ state.session_date }} ({{ state.weekday }}) | Bar {{ state.last_bar_time }} IST | Source: {{ source }}</p>
     </div>
-    <div style="display:flex; gap:8px; align-items:center;">
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       {% if state.avoid_today or state.gap_excluded %}
-        <span class="badge bad">{{ state.status }}</span>
+        <span class="badge bad" data-status-badge="{{ state.index_key }}">{{ state.status }}</span>
       {% elif state.status.startswith('CONFIRMED') %}
-        <span class="badge good">{{ state.status }}</span>
+        <span class="badge good" data-status-badge="{{ state.index_key }}">{{ state.status }}</span>
       {% elif state.status.startswith('ARMED') %}
-        <span class="badge warn">{{ state.status }}</span>
+        <span class="badge warn" data-status-badge="{{ state.index_key }}">{{ state.status }}</span>
       {% else %}
-        <span class="badge">{{ state.status }}</span>
+        <span class="badge" data-status-badge="{{ state.index_key }}">{{ state.status }}</span>
       {% endif %}
+      <button type="button"
+              id="pageActivateFeedBtn"
+              class="btn {{ 'primary' if state.feed_enabled else '' }}"
+              onclick="window.switchLiveFeedIndex && window.switchLiveFeedIndex('{{ state.index_key }}')">
+        {{ 'FEED RECEIVING' if state.feed_enabled else 'Switch Feed to ' + state.index_key }}
+      </button>
       <select id="modeSelect" class="ctrl" onchange="reloadIndexAnalytics(1)">
         <option value="refined" selected>Refined Rules</option>
         <option value="baseline">Baseline (Mon-Fri Unfiltered)</option>
@@ -25,14 +31,15 @@
   <div class="grid" style="margin-top:12px;">
     <div class="card">
       <h3 style="margin-top:0;">Live / Latest Signal State</h3>
-      <div class="row-kv"><span>Status:</span><strong>{{ state.status }}</strong></div>
+      <div class="row-kv"><span>Feed Status:</span><strong id="pageFeedStatus" class="{{ 'pos' if state.feed_enabled else 'muted' }}">{{ 'FEED RECEIVING' if state.feed_enabled else 'FEED BLOCKED TEMPORARILY' }}</strong></div>
+      <div class="row-kv"><span>Status:</span><strong data-status-text="{{ state.index_key }}">{{ state.status }}</strong></div>
       <div class="row-kv"><span>Live / Current Price:</span><strong data-live-price="{{ state.index_key }}">{{ state.spot_price or state.last_close }}</strong></div>
       <div class="row-kv"><span>Last Close:</span><strong data-last-close="{{ state.index_key }}">{{ state.last_close }}</strong></div>
       <div class="row-kv"><span>SMA(2) / SMA(10):</span><strong data-sma="{{ state.index_key }}">{{ state.sma2 }} / {{ state.sma10 }}</strong></div>
       <div class="row-kv"><span>Armed Direction:</span><strong data-armed="{{ state.index_key }}">{{ state.armed_dir or 'None' }}</strong></div>
       <div class="row-kv"><span>Entry / SL / Target(0.60R):</span><strong data-est="{{ state.index_key }}">{{ state.entry_price or '-' }} / {{ state.stop_price or '-' }} / {{ state.target_price or '-' }}</strong></div>
       <div class="row-kv"><span>Trades Today:</span><strong data-trades="{{ state.index_key }}">{{ state.trades_today }} / {{ rules.max_trades_per_day }}</strong></div>
-      <p class="muted" style="margin-top:8px;">{{ state.status_reason }}</p>
+      <p class="muted" style="margin-top:8px;" data-status-reason="{{ state.index_key }}">{{ state.status_reason }}</p>
     </div>
 
     <div class="card">
@@ -50,7 +57,7 @@
       <h3 style="margin-top:0;">Exit Levels &amp; Target Ladder (50%–100%)</h3>
       <div class="row-kv"><span>Progress (-1.0R SL &rarr; +1.0R):</span><strong data-idx-progress-pct="{{ state.index_key }}">{{ state.target_ladder.progress_pct }}%</strong></div>
       <div class="progress-wrap"><div class="progress-fill" data-idx-progress-fill="{{ state.index_key }}" style="width:{{ state.target_ladder.progress_pct }}%;"></div></div>
-      <div class="muted" style="margin-bottom:8px;">{{ state.target_ladder.milestone_label }}</div>
+      <div class="muted" data-idx-progress-label="{{ state.index_key }}" style="margin-bottom:8px;">{{ state.target_ladder.milestone_label }}</div>
       <div class="row-kv"><span>Exit - Stop Loss (SL):</span><strong class="neg">{{ state.monitored_trade.sl_price if state.monitored_trade else (state.stop_price or '-') }}</strong></div>
       <div class="row-kv"><span>Exit - Primary Target (60% / 0.60R):</span><strong class="pos">{{ state.monitored_trade.target_price if state.monitored_trade else (state.target_price or '-') }}</strong></div>
       <div class="row-kv"><span>Exit - Session Cutoff:</span><strong>15:15 IST (EOD)</strong></div>
@@ -83,7 +90,7 @@
         <div class="row-kv"><span>Opened:</span><span>{{ state.monitored_trade.opened_at }}</span></div>
         <div style="display:flex; gap:8px; margin-top:10px;">
           <input id="manualExitPrice" class="ctrl" type="number" step="0.05" value="{{ state.last_close }}">
-          <button class="btn" onclick="closeTrade()">Close &amp; Log Trade</button>
+          <button class="btn" type="button" onclick="closeTrade()">Close &amp; Log Trade</button>
         </div>
       {% else %}
         <p class="muted">No active monitored position on {{ state.index_key }}. Start monitoring a setup below (auto-logs to history on close):</p>
@@ -95,7 +102,7 @@
           <input id="monEntry" class="ctrl" type="number" step="0.05" value="{{ state.entry_price or state.last_close }}" placeholder="Entry">
           <input id="monSl" class="ctrl" type="number" step="0.05" value="{{ state.stop_price or state.last_close }}" placeholder="SL">
         </div>
-        <button class="btn primary" style="margin-top:10px;" onclick="startTrade()">Start Monitoring Trade</button>
+        <button class="btn primary" type="button" style="margin-top:10px;" onclick="startTrade()">Start Monitoring Trade</button>
       {% endif %}
     </div>
 
@@ -115,7 +122,7 @@
   </div>
 
   <div class="card" style="margin-top:16px;">
-    <h3 style="margin-top:0;">Strike Ladder (ITM1, ATM, OTM1–OTM10) · Spot {{ state.strike_ladder.spot }} · Step {{ state.strike_ladder.step }} · {{ state.strike_ladder.quote_source }}</h3>
+    <h3 style="margin-top:0;">Strike Ladder (ITM1, ATM, OTM1–OTM10) &middot; Spot {{ state.strike_ladder.spot }} &middot; Step {{ state.strike_ladder.step }} &middot; {{ state.strike_ladder.quote_source }}</h3>
     <table>
       <thead><tr><th>Zone</th><th>Strike</th><th>Type</th><th>Symbol</th><th>LTP</th></tr></thead>
       <tbody>
@@ -218,8 +225,8 @@
     <div class="toolbar" style="margin-top:12px;">
       <span class="muted" id="pageInfo">Page 1</span>
       <div style="display:flex; gap:8px;">
-        <button class="btn" id="prevBtn" onclick="changeIndexPage(-1)">Prev</button>
-        <button class="btn" id="nextBtn" onclick="changeIndexPage(1)">Next</button>
+        <button class="btn" type="button" id="prevBtn" onclick="changeIndexPage(-1)">Prev</button>
+        <button class="btn" type="button" id="nextBtn" onclick="changeIndexPage(1)">Next</button>
       </div>
     </div>
   </div>
@@ -449,81 +456,86 @@
     if (next >= 1 && next <= totalPages) reloadIndexAnalytics(next);
   }
 
+  window.onLiveStatusUpdate = function(data) {
+    if (!data || !Array.isArray(data.indices) || typeof IDX_KEY === "undefined") return;
+    const idx = data.indices.find(item => item.index_key === IDX_KEY);
+    if (!idx) return;
+
+    const pSt = document.getElementById("pageFeedStatus");
+    const pBtn = document.getElementById("pageActivateFeedBtn");
+    if (pSt) {
+      pSt.textContent = idx.feed_enabled ? "FEED RECEIVING" : "FEED BLOCKED TEMPORARILY";
+      pSt.className = idx.feed_enabled ? "pos" : "muted";
+    }
+    if (pBtn) {
+      pBtn.textContent = idx.feed_enabled ? "FEED RECEIVING" : `Switch Feed to ${IDX_KEY}`;
+      pBtn.classList.toggle("primary", Boolean(idx.feed_enabled));
+    }
+
+    const badgeEl = document.querySelector(`[data-status-badge="${IDX_KEY}"]`);
+    if (badgeEl && idx.status) {
+      badgeEl.textContent = idx.status;
+      badgeEl.className = "badge";
+      if (idx.avoid_today || idx.gap_excluded || String(idx.status).startsWith("BLOCKED")) {
+        badgeEl.classList.add("bad");
+      } else if (String(idx.status).startsWith("CONFIRMED")) {
+        badgeEl.classList.add("good");
+      } else if (String(idx.status).startsWith("ARMED")) {
+        badgeEl.classList.add("warn");
+      }
+    }
+
+    const stTextEl = document.querySelector(`[data-status-text="${IDX_KEY}"]`);
+    if (stTextEl && idx.status) stTextEl.textContent = idx.status;
+
+    const reasonEl = document.querySelector(`[data-status-reason="${IDX_KEY}"]`);
+    if (reasonEl && idx.status_reason) reasonEl.textContent = idx.status_reason;
+
+    const liveNum = (idx.spot_price != null) ? idx.spot_price : idx.last_close;
+    const pct = (typeof window.computeLiveProgressPct === "function")
+      ? window.computeLiveProgressPct(idx, liveNum)
+      : Number((idx.target_ladder && idx.target_ladder.progress_pct) || 0);
+    const pPctEl = document.querySelector(`[data-idx-progress-pct="${IDX_KEY}"]`);
+    if (pPctEl) pPctEl.textContent = `${pct}%`;
+    const pFillEl = document.querySelector(`[data-idx-progress-fill="${IDX_KEY}"]`);
+    if (pFillEl) pFillEl.style.width = `${pct}%`;
+    const pLblEl = document.querySelector(`[data-idx-progress-label="${IDX_KEY}"]`);
+    if (pLblEl && idx.target_ladder) {
+      pLblEl.textContent = idx.target_ladder.milestone_label || "Target Progress";
+    }
+
+    if (typeof window.syncLiveChartWithIndex === "function") {
+      window.syncLiveChartWithIndex(idx, liveNum, new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }));
+    }
+
+    const livePriceEl = document.querySelector(`[data-live-price="${IDX_KEY}"]`);
+    if (livePriceEl) livePriceEl.textContent = liveNum;
+
+    const lastCloseEl = document.querySelector(`[data-last-close="${IDX_KEY}"]`);
+    if (lastCloseEl && idx.last_close != null) lastCloseEl.textContent = idx.last_close;
+
+    const smaEl = document.querySelector(`[data-sma="${IDX_KEY}"]`);
+    if (smaEl) smaEl.textContent = `${idx.sma2} / ${idx.sma10}`;
+
+    const armedEl = document.querySelector(`[data-armed="${IDX_KEY}"]`);
+    if (armedEl) armedEl.textContent = idx.armed_dir || "None";
+
+    const estEl = document.querySelector(`[data-est="${IDX_KEY}"]`);
+    if (estEl) {
+      const e = idx.entry_price ?? "-";
+      const s = idx.stop_price ?? "-";
+      const t = idx.target_price ?? "-";
+      estEl.textContent = `${e} / ${s} / ${t}`;
+    }
+
+    const tradesEl = document.querySelector(`[data-trades="${IDX_KEY}"]`);
+    if (tradesEl && data.rules) {
+      tradesEl.textContent = `${idx.trades_today ?? 0} / ${data.rules.max_trades_per_day ?? 2}`;
+    }
+  };
+
   renderTargetProgressChart();
   loadSmaChart();
   reloadIndexAnalytics(1);
 </script>
 {% endblock %}
-
-
-<script>
-window.onLiveStatusUpdate = function(data) {
-  if (!data || !Array.isArray(data.indices) || typeof IDX_KEY === "undefined") return;
-  const idx = data.indices.find(item => item.index_key === IDX_KEY);
-  if (!idx) return;
-  const pSt = document.getElementById("pageFeedStatus");
-  const pBtn = document.getElementById("pageActivateFeedBtn");
-  if (pSt) {
-    pSt.textContent = idx.feed_enabled ? "FEED RECEIVING" : "FEED BLOCKED TEMPORARILY";
-    pSt.className = idx.feed_enabled ? "pos" : "muted";
-  }
-  if (pBtn) {
-    pBtn.textContent = idx.feed_enabled ? "FEED RECEIVING (Active)" : "Activate Live Feed (Disable Others)";
-    pBtn.classList.toggle("primary", !Boolean(idx.feed_enabled));
-  }
-
-  
-  const liveNum = (idx.spot_price != null) ? idx.spot_price : idx.last_close;
-  const pct = (typeof window.computeLiveProgressPct === "function") ? window.computeLiveProgressPct(idx, liveNum) : Number((idx.target_ladder && idx.target_ladder.progress_pct) || 0);
-  const pPctEl = document.querySelector(`[data-idx-progress-pct="${IDX_KEY}"]`);
-  if (pPctEl) pPctEl.textContent = `${pct}%`;
-  const pFillEl = document.querySelector(`[data-idx-progress-fill="${IDX_KEY}"]`);
-  if (pFillEl) pFillEl.style.width = `${pct}%`;
-  if (typeof window.syncLiveChartWithIndex === "function") {
-    window.syncLiveChartWithIndex(idx, liveNum, new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }));
-  }
-
-  const livePriceEl = document.querySelector(`[data-live-price="${IDX_KEY}"]`);
-  if (livePriceEl) {
-    const val = (idx.spot_price != null) ? idx.spot_price : idx.last_close;
-    livePriceEl.textContent = val;
-  }
-
-  const lastCloseEl = document.querySelector(`[data-last-close="${IDX_KEY}"]`);
-  if (lastCloseEl && idx.last_close != null) lastCloseEl.textContent = idx.last_close;
-
-  const smaEl = document.querySelector(`[data-sma="${IDX_KEY}"]`);
-  if (smaEl) smaEl.textContent = `${idx.sma2} / ${idx.sma10}`;
-
-  const armedEl = document.querySelector(`[data-armed="${IDX_KEY}"]`);
-  if (armedEl) armedEl.textContent = idx.armed_dir || "None";
-
-  const estEl = document.querySelector(`[data-est="${IDX_KEY}"]`);
-  if (estEl) {
-    const e = idx.entry_price ?? "-";
-    const s = idx.stop_price ?? "-";
-    const t = idx.target_price ?? "-";
-    estEl.textContent = `${e} / ${s} / ${t}`;
-  }
-
-  const tradesEl = document.querySelector(`[data-trades="${IDX_KEY}"]`);
-  if (tradesEl && data.rules) {
-    tradesEl.textContent = `${idx.trades_today ?? 0} / ${data.rules.max_trades_per_day ?? 2}`;
-  }
-};
-</script>
-
-
-<script>
-window.activateThisIndexFeed = async function() {
-  if (typeof IDX_KEY === "undefined") return;
-  try {
-    const res = await fetch("/api/feed/active", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ index_key: IDX_KEY })
-    });
-    if (res.ok && window.triggerLivePoll) await window.triggerLivePoll();
-  } catch (_) {}
-};
-</script>

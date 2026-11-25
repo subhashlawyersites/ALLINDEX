@@ -1,13 +1,15 @@
-from datetime import datetime
-from zoneinfo import ZoneInfo
-from pathlib import Path
 import json
-from flask import Flask, jsonify, render_template, request
-from fyers_auth import fyers_auth_bp
+import threading
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
 import pandas as pd
+from flask import Flask, Response, jsonify, render_template, request
+
 from analytics_data import build_historical_analytics
 from data_provider import fetch_latest_candles
-from fyers_auth import get_fyers_config, save_or_authorize_fyers, test_fyers_connection
+from fyers_auth import fyers_auth_bp, get_fyers_config, save_or_authorize_fyers, test_fyers_connection
 from signal_engine import COMMON_RULES, INDEX_CONFIGS, evaluate_index_signal
 from strike_ladder import build_strike_ladder, build_target_ladder
 from trade_monitor import (
@@ -24,76 +26,40 @@ IST = ZoneInfo("Asia/Kolkata")
 app = Flask(__name__)
 app.register_blueprint(fyers_auth_bp)
 
-
-
-FEED_STATE_FILE = Path(__file__).resolve().parent / ".index_feed_state.json"
-DEFAULT_FEED_STATE = {
-    "NIFTY50": True,
-    "SENSEX": False,
-    "BANKNIFTY": False,
-    "FINNIFTY": False,
-}
-
-
-def get_feed_states() -> dict[str, bool]:
-    state = dict(DEFAULT_FEED_STATE)
-    if FEED_STATE_FILE.exists():
-        try:
-            saved = json.loads(FEED_STATE_FILE.read_text(encoding="utf-8"))
-            if isinstance(saved, dict):
-                for k in DEFAULT_FEED_STATE:
-                    if k in saved:
-                        state[k] = bool(saved[k])
-        except Exception:
-            pass
-    return state
-
-
-def set_index_feed_enabled(index_key: str, enabled: bool) -> dict[str, bool]:
-    state = get_feed_states()
-    k = index_key.upper()
-    if k in state:
-        state[k] = bool(enabled)
-        try:
-            FEED_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            FEED_STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
-        except Exception:
-            pass
-    return state
-
-
-
-
+_FEED_LOCK = threading.Lock()
 ACTIVE_FEED_FILE = Path(__file__).resolve().parent / ".active_feed_index.json"
 _ACTIVE_FEED_KEY = "NIFTY50"
 
 
 def get_active_feed_index() -> str:
     global _ACTIVE_FEED_KEY
-    if ACTIVE_FEED_FILE.exists():
-        try:
-            saved = json.loads(ACTIVE_FEED_FILE.read_text(encoding="utf-8")).get("active_index", "")
-            if isinstance(saved, str) and saved.upper() in INDEX_CONFIGS:
-                _ACTIVE_FEED_KEY = saved.upper()
-        except Exception:
-            pass
-    if _ACTIVE_FEED_KEY not in INDEX_CONFIGS:
+    with _FEED_LOCK:
+        if _ACTIVE_FEED_KEY in INDEX_CONFIGS:
+            return _ACTIVE_FEED_KEY
+        if ACTIVE_FEED_FILE.exists():
+            try:
+                saved = str((json.loads(ACTIVE_FEED_FILE.read_text(encoding="utf-8")) or {}).get("active_index") or "").strip().upper()
+                if saved in INDEX_CONFIGS:
+                    _ACTIVE_FEED_KEY = saved
+                    return _ACTIVE_FEED_KEY
+            except Exception:
+                pass
         _ACTIVE_FEED_KEY = "NIFTY50"
-    return _ACTIVE_FEED_KEY
+        return _ACTIVE_FEED_KEY
 
 
 def set_active_feed_index(index_key: str) -> str:
     global _ACTIVE_FEED_KEY
-    k = str(index_key or "").upper()
+    k = str(index_key or "").strip().upper()
     if k not in INDEX_CONFIGS:
         k = "NIFTY50"
-    _ACTIVE_FEED_KEY = k
-    try:
-        ACTIVE_FEED_FILE.write_text(json.dumps({"active_index": k}), encoding="utf-8")
-    except Exception:
-        pass
+    with _FEED_LOCK:
+        _ACTIVE_FEED_KEY = k
+        try:
+            ACTIVE_FEED_FILE.write_text(json.dumps({"active_index": k}), encoding="utf-8")
+        except Exception:
+            pass
     return _ACTIVE_FEED_KEY
-
 
 
 def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
@@ -115,13 +81,21 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
         st["feed_state_label"] = "FEED RECEIVING" if feed_on else "FEED BLOCKED TEMPORARILY"
 
         last_row = df.iloc[-1] if not df.empty else {}
-        spot_now = st["live_ltp"] if (feed_on and src == "FYERS_LIVE_15M" and live_ltp is not None) else float(last_row.get("close", st["last_close"]))
+        spot_now = (
+            st["live_ltp"]
+            if (feed_on and src == "FYERS_LIVE_15M" and live_ltp is not None)
+            else float(last_row.get("close", st["last_close"]))
+        )
         st["spot_price"] = spot_now
         price_snaps[key] = {
             "high": max(float(last_row.get("high", spot_now)), spot_now),
             "low": min(float(last_row.get("low", spot_now)), spot_now),
             "close": spot_now,
-            "time_str": (live_q.get("updated_ist") if isinstance(live_q, dict) and live_q.get("updated_ist") else st["last_bar_time"]),
+            "time_str": (
+                live_q.get("updated_ist")
+                if isinstance(live_q, dict) and live_q.get("updated_ist")
+                else st["last_bar_time"]
+            ),
         }
 
         if st["avoid_today"]:
@@ -133,6 +107,7 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
 
         sources[key] = src
         states.append(st)
+
     evaluate_monitored_trades_against_market(price_snaps)
     active_map = get_active_trades()
 
@@ -160,6 +135,58 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
     return states, sources, fyers_status
 
 
+@app.route("/manifest.json")
+def pwa_manifest():
+    manifest = {
+        "name": "SMA2/SMA10 Index Decision Support",
+        "short_name": "IndexSignals",
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#0f172a",
+        "theme_color": "#0f172a",
+        "description": "Multi-index SMA2/SMA10 signal monitoring and decision-support dashboard.",
+        "icons": [],
+    }
+    return jsonify(manifest)
+
+
+@app.route("/sw.js")
+def service_worker():
+    sw_code = """
+const CACHE_NAME = "sma2-sma10-pwa-v1";
+self.addEventListener("install", (event) => {
+  self.skipWaiting();
+});
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
+});
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  const url = new URL(req.url);
+  if (req.method !== "GET" || url.pathname.startsWith("/api/") || url.pathname.startsWith("/fyers/")) {
+    return;
+  }
+  event.respondWith(
+    fetch(req)
+      .then((res) => {
+        if (res && res.status === 200 && url.origin === self.location.origin) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, clone)).catch(() => {});
+        }
+        return res;
+      })
+      .catch(() => caches.match(req))
+  );
+});
+""".strip()
+    return Response(sw_code, mimetype="application/javascript")
+
+
 @app.route("/")
 def combined_dashboard():
     states, sources, fyers_status = _build_all_states()
@@ -181,7 +208,7 @@ def combined_dashboard():
 @app.route("/auth", methods=["GET", "POST"])
 def auth_page():
     auth_result = None
-    if request.args.get("fyers_auth") == "ok" and not auth_result:
+    if request.args.get("fyers_auth") == "ok":
         auth_result = {"ok": True, "message": "Fresh Fyers access token exchanged and saved."}
     if request.method == "POST":
         auth_result = save_or_authorize_fyers(
@@ -209,6 +236,7 @@ def auth_page():
 @app.route("/<index_slug>")
 def single_index_page(index_slug: str):
     key = index_slug.upper()
+    active_feed = get_active_feed_index()
     if key not in INDEX_CONFIGS:
         states, sources, fyers_status = _build_all_states()
         return render_template(
@@ -221,6 +249,7 @@ def single_index_page(index_slug: str):
             events=get_recent_events(15),
             rules=COMMON_RULES,
             now_str=datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST"),
+            active_feed_index=active_feed,
         ), 404
 
     states, sources, fyers_status = _build_all_states()
@@ -237,6 +266,7 @@ def single_index_page(index_slug: str):
         rules=COMMON_RULES,
         now_str=now_str,
         all_index_keys=list(INDEX_CONFIGS.keys()),
+        active_feed_index=active_feed,
     )
 
 
@@ -307,7 +337,7 @@ def api_chart(index_slug: str):
     if key not in INDEX_CONFIGS:
         return jsonify({"error": "Unknown index"}), 404
 
-    df, src = fetch_latest_candles(key)
+    df, src = fetch_latest_candles(key, allow_fyers=(key == get_active_feed_index()))
     work = df.copy()
     ts = pd.to_datetime(work["timestamp_ist"], errors="coerce")
     if ts.isna().all() and "epoch" in work.columns:
@@ -356,23 +386,19 @@ def api_analytics(scope: str):
     return jsonify(data)
 
 
-
-
-
-
-
-
-
 @app.route("/api/feed/active", methods=["GET", "POST"])
 def api_feed_active():
     if request.method == "POST":
         body = request.get_json(silent=True) or {}
-        target = str(body.get("index_key") or body.get("index") or request.args.get("index_key") or "").strip().upper()
+        target = str(
+            body.get("index_key") or body.get("index") or request.args.get("index_key") or ""
+        ).strip().upper()
         if target not in INDEX_CONFIGS:
             return jsonify({"ok": False, "error": f"Unknown index: {target}"}), 400
         active = set_active_feed_index(target)
         return jsonify({"ok": True, "active_index": active})
     return jsonify({"ok": True, "active_index": get_active_feed_index()})
+
 
 @app.route("/api/status")
 def api_status():

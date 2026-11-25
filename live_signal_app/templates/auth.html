@@ -19,7 +19,11 @@
 
     <div class="card">
       <h3 style="margin-top:0;">Current Connection Status</h3>
-      <div class="row-kv"><span>Status:</span><strong>{{ 'CONNECTED' if (fyers_status.connected or fyers_status.ok) else 'DISCONNECTED' }}</strong></div>
+      {% set is_conn = fyers_status.connected or fyers_status.ok %}
+      <div class="row-kv">
+        <span>Status:</span>
+        <span class="badge {{ 'good' if is_conn else 'warn' }}">{{ 'CONNECTED' if is_conn else 'DISCONNECTED' }}</span>
+      </div>
       <div class="row-kv"><span>Details:</span><span>{{ fyers_status.message }}</span></div>
       <div class="row-kv"><span>App ID:</span><code>{{ cfg.client_id or 'Missing' }}</code></div>
       <div class="row-kv"><span>Access Token Saved:</span><strong>{{ 'Yes' if cfg.has_token else 'No' }}</strong></div>
