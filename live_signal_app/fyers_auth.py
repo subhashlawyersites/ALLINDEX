@@ -10,11 +10,24 @@ IST = ZoneInfo("Asia/Kolkata")
 fyers_auth_bp = Blueprint("fyers_auth", __name__)
 
 
+def _candidate_token_paths() -> list[Path]:
+    paths: list[Path] = []
+    for env_key in ("RENDER_DISK_PATH", "PERSISTENT_STORAGE_PATH", "DATA_DIR"):
+        mount = (os.getenv(env_key) or "").strip()
+        if mount:
+            paths.append(Path(mount) / "fyers_token.json")
+    if Path("/var/data").exists():
+        paths.append(Path("/var/data") / "fyers_token.json")
+    paths.append(Path(__file__).resolve().parent / ".fyers_token.json")
+    deduped: list[Path] = []
+    for p in paths:
+        if p not in deduped:
+            deduped.append(p)
+    return deduped
+
+
 def _token_file_path() -> Path:
-    mount = (os.getenv("DATA_MOUNT_PATH") or "").strip()
-    if mount and Path(mount).exists():
-        return Path(mount) / "fyers_token.json"
-    return Path(__file__).resolve().parent / ".fyers_token.json"
+    return _candidate_token_paths()[0]
 
 
 def get_fyers_credentials() -> dict:
