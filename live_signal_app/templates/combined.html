@@ -31,19 +31,13 @@
       </div>
       <p class="muted" style="margin:6px 0 8px;">{{ s.session_date }} ({{ s.weekday }}) | Bar {{ s.last_bar_time }} | {{ sources[s.index_key] }}</p>
       <div class="row-kv"><span>Spot / SMA2 / SMA10:</span><strong>{{ s.last_close }} / {{ s.sma2 }} / {{ s.sma10 }}</strong></div>
-      <div class="row-kv"><span>ATM Strike:</span><strong>{{ s.strike_ladder.atm or '-' }} ({{ s.strike_ladder.direction }})</strong></div>
+      <div class="row-kv"><span>ATM Strike:</span><strong data-atm="{{ s.index_key }}">{{ s.strike_ladder.atm or '-' }} ({{ s.strike_ladder.direction }})</strong></div>
       <div class="row-kv"><span>Avoid Days:</span><span>{{ s.avoid_weekdays|join(', ') if s.avoid_weekdays else 'None (caution: ' + (s.caution_weekdays|join(', ') or 'Friday') + ')' }}</span></div>
       {% if s.target_ladder.active %}
       <div class="progress-wrap"><div class="progress-fill" style="width:{{ s.target_ladder.progress_pct }}%;"></div></div>
       <div class="muted">{{ s.target_ladder.milestone_label }} ({{ s.target_ladder.progress_pct }}%)</div>
       {% endif %}
       <p class="muted" style="margin-top:8px;" data-reason="{{ s.index_key }}">{{ s.status_reason }}</p>
-      <div class="row-kv" style="margin-top:8px;">
-        <span>Fyers Feed:</span>
-        <button class="btn {{ 'primary' if s.feed_enabled else '' }}" type="button" data-feed-btn="{{ s.index_key }}" onclick="toggleIndexFeed('{{ s.index_key }}')">
-          {{ 'FEED ON (Auto)' if s.feed_enabled else 'FEED OFF (Paused)' }}
-        </button>
-      </div>
       <a href="/{{ s.index_key|lower }}" class="btn" style="display:inline-block; text-decoration:none; margin-top:4px;">Open {{ s.index_key }}</a>
     </div>
     {% endfor %}
@@ -317,32 +311,25 @@
 {% endblock %}
 
 
-<script>
-window.toggleIndexFeed = async function(indexKey) {
-  try {
-    const res = await fetch(`/api/feed/${encodeURIComponent(indexKey.toLowerCase())}/toggle`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({})
-    });
-    if (res.ok && window.triggerLivePoll) {
-      await window.triggerLivePoll();
-    }
-  } catch (_) {}
-};
 
+<script>
 window.onLiveStatusUpdate = function(data) {
   if (!data || !Array.isArray(data.indices)) return;
   data.indices.forEach(idx => {
-    const btn = document.querySelector(`[data-feed-btn="${idx.index_key}"]`);
-    if (btn) {
-      btn.textContent = idx.feed_enabled ? "FEED ON (Auto)" : "FEED OFF (Paused)";
-      btn.classList.toggle("primary", Boolean(idx.feed_enabled));
-    }
     const reasonEl = document.querySelector(`[data-reason="${idx.index_key}"]`);
     if (reasonEl && idx.status_reason) {
       reasonEl.textContent = idx.status_reason;
     }
+    const spotSmaEl = document.querySelector(`[data-spot-sma="${idx.index_key}"]`);
+    if (spotSmaEl) {
+      const spotVal = (idx.spot_price != null) ? idx.spot_price : idx.last_close;
+      spotSmaEl.textContent = `${spotVal} / ${idx.sma2} / ${idx.sma10}`;
+    }
+    const atmEl = document.querySelector(`[data-atm="${idx.index_key}"]`);
+    if (atmEl && idx.strike_ladder) {
+      atmEl.textContent = `${idx.strike_ladder.atm || '-'} (${idx.strike_ladder.direction || 'CALL'})`;
+    }
   });
 };
 </script>
+

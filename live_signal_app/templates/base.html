@@ -158,14 +158,7 @@
       <button class="btn" onclick="triggerTestAlert()">Test Alert</button>
       <span>{{ now_str }}</span>
       <button class="btn" id="manualRefreshBtn" type="button" onclick="window.triggerLivePoll && window.triggerLivePoll()">Refresh Now</button>
-      <button class="btn" id="autoPollToggleBtn" type="button" onclick="window.toggleAutoPoll && window.toggleAutoPoll()">Auto: ON (10s)</button>
-      <select id="autoPollIntervalSelect" class="ctrl" style="width:auto;" onchange="window.changeAutoPollInterval && window.changeAutoPollInterval(this.value)">
-        <option value="5000">5s</option>
-        <option value="10000" selected>10s</option>
-        <option value="15000">15s</option>
-        <option value="30000">30s</option>
-        <option value="60000">60s</option>
-      </select>
+      <span class="badge good" id="liveStreamBadge">STREAM: LIVE</span>
       <button class="btn" onclick="toggleTheme()">Theme</button>
     </div>
   </header>
@@ -298,67 +291,49 @@
   </script>
   {% block scripts %}{% endblock %}
 
+
+
+
 <script>
 (function() {
-  let autoPollEnabled = true;
-  let pollIntervalMs = 10000;
-  let pollTimer = null;
-  let pollInFlight = false;
-
-  function updateAutoPollButton() {
-    const btn = document.getElementById("autoPollToggleBtn");
-    if (btn) {
-      btn.textContent = autoPollEnabled ? `Auto: ON (${Math.round(pollIntervalMs / 1000)}s)` : "Auto: OFF";
+  function applyPayload(data) {
+    if (!data || !Array.isArray(data.indices)) return;
+    if (data.updated_ist) {
+      document.querySelectorAll("[data-live-clock]").forEach(el => { el.textContent = data.updated_ist; });
+    }
+    if (typeof window.onLiveStatusUpdate === "function") {
+      window.onLiveStatusUpdate(data);
     }
   }
 
-  async function runLivePoll() {
-    if (pollInFlight) return;
-    pollInFlight = true;
+  async function fetchImmediateSnapshot() {
     try {
       const res = await fetch("/api/status", { cache: "no-store" });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.updated_ist) {
-        document.querySelectorAll("[data-live-clock]").forEach(el => { el.textContent = data.updated_ist; });
-      }
-      if (typeof window.onLiveStatusUpdate === "function") {
-        window.onLiveStatusUpdate(data);
-      }
-    } catch (_) {
-    } finally {
-      pollInFlight = false;
-    }
+      if (res.ok) applyPayload(await res.json());
+    } catch (_) {}
   }
 
-  function resetPollTimer() {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
-    updateAutoPollButton();
-    if (autoPollEnabled) {
-      pollTimer = setInterval(runLivePoll, pollIntervalMs);
-    }
-  }
+  window.triggerLivePoll = fetchImmediateSnapshot;
 
-  window.toggleAutoPoll = function() {
-    autoPollEnabled = !autoPollEnabled;
-    resetPollTimer();
-  };
-
-  window.changeAutoPollInterval = function(val) {
-    const parsed = parseInt(val, 10);
-    if (!Number.isNaN(parsed) && parsed >= 3000) {
-      pollIntervalMs = parsed;
-      resetPollTimer();
-    }
-  };
-
-  window.triggerLivePoll = runLivePoll;
   document.addEventListener("DOMContentLoaded", () => {
-    resetPollTimer();
-    runLivePoll();
+    fetchImmediateSnapshot();
+    if (typeof window.EventSource === "function") {
+      const es = new EventSource("/api/stream");
+      es.onmessage = (evt) => {
+        try {
+          const parsed = JSON.parse(evt.data);
+          if (!parsed.error) applyPayload(parsed);
+        } catch (_) {}
+      };
+      es.onerror = () => {
+        const badge = document.getElementById("liveStreamBadge");
+        if (badge) badge.textContent = "STREAM: RECONNECTING";
+      };
+      es.onopen = () => {
+        const badge = document.getElementById("liveStreamBadge");
+        if (badge) badge.textContent = "STREAM: LIVE";
+      };
+    }
   });
 })();
 </script>

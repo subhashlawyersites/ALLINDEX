@@ -2,7 +2,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
 import json
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 from fyers_auth import fyers_auth_bp
 import pandas as pd
 from analytics_data import build_historical_analytics
@@ -67,16 +67,11 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
     sources = {}
     price_snaps = {}
 
-    feed_map = get_feed_states()
     for key in INDEX_CONFIGS:
-        feed_on = feed_map.get(key, False)
-        if feed_on:
-            df, src = fetch_latest_candles(key)
-        else:
-            df, raw_src = fetch_latest_candles(key, allow_fyers=False)
-            src = f"PAUSED ({raw_src})"
+        feed_on = (key == "NIFTY50")
+        df, src = fetch_latest_candles(key, allow_fyers=feed_on)
         st = evaluate_index_signal(df, key).to_dict()
-        live_q = (df.attrs or {}).get("live_quote") if hasattr(df, "attrs") else {}
+        live_q = (df.attrs or {}).get("live_quote") if (feed_on and hasattr(df, "attrs")) else {}
         live_ltp = live_q.get("ltp") if isinstance(live_q, dict) else None
         st["live_quote"] = live_q or {}
         st["live_ltp"] = float(live_ltp) if live_ltp is not None else float(st.get("last_close") or 0.0)
@@ -84,7 +79,7 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
         st["feed_enabled"] = feed_on
 
         last_row = df.iloc[-1] if not df.empty else {}
-        spot_now = st["live_ltp"] if (src == "FYERS_LIVE_15M" and live_ltp is not None) else float(last_row.get("close", st["last_close"]))
+        spot_now = st["live_ltp"] if (feed_on and src == "FYERS_LIVE_15M" and live_ltp is not None) else float(last_row.get("close", st["last_close"]))
         st["spot_price"] = spot_now
         price_snaps[key] = {
             "high": max(float(last_row.get("high", spot_now)), spot_now),
@@ -102,7 +97,6 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
 
         sources[key] = src
         states.append(st)
-
     evaluate_monitored_trades_against_market(price_snaps)
     active_map = get_active_trades()
 
@@ -326,24 +320,38 @@ def api_analytics(scope: str):
 
 
 
-@app.route("/api/feed/state", methods=["GET"])
-def api_feed_state():
-    return jsonify({"ok": True, "feeds": get_feed_states()})
 
 
-@app.route("/api/feed/<index_slug>/toggle", methods=["POST"])
-def api_feed_toggle(index_slug: str):
-    key = index_slug.upper()
-    if key not in INDEX_CONFIGS:
-        return jsonify({"ok": False, "error": f"Unknown index: {index_slug}"}), 404
-    body = request.get_json(silent=True) or {}
-    current = get_feed_states()
-    if "enabled" in body:
-        target = bool(body["enabled"])
-    else:
-        target = not current.get(key, False)
-    updated = set_index_feed_enabled(key, target)
-    return jsonify({"ok": True, "index_key": key, "feed_enabled": updated[key], "feeds": updated})
+@app.route("/api/stream")
+def api_stream():
+    import json as _json
+    import time as _time
+
+    def _event_generator():
+        while True:
+            try:
+                states, sources, fyers_status = _build_all_states()
+                payload = {
+                    "updated_ist": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST"),
+                    "fyers": fyers_status,
+                    "sources": sources,
+                    "events": get_recent_events(15),
+                    "indices": states,
+                }
+                yield f"data: {_json.dumps(payload, default=str)}\n\n"
+            except Exception as exc:
+                yield f"data: {_json.dumps({'error': str(exc)})}\n\n"
+            _time.sleep(1.0)
+
+    return Response(
+        _event_generator(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 @app.route("/api/status")
 def api_status():
