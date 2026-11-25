@@ -50,6 +50,24 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10, allow_fyers: b
                 "range_to": to_dt.strftime("%Y-%m-%d"),
                 "cont_flag": "1",
             }
+            live_quote = {}
+            try:
+                q_resp = fyers.quotes(data={"symbols": cfg["symbol"]})
+                if isinstance(q_resp, dict) and q_resp.get("s") == "ok" and q_resp.get("d"):
+                    v = q_resp["d"][0].get("v") or {}
+                    live_quote = {
+                        "symbol": cfg["symbol"],
+                        "ltp": v.get("lp"),
+                        "change": v.get("ch"),
+                        "change_pct": v.get("chp"),
+                        "high": v.get("high_price"),
+                        "low": v.get("low_price"),
+                        "prev_close": v.get("prev_close_price"),
+                        "updated_ist": now_ist.strftime("%Y-%m-%d %H:%M:%S IST"),
+                    }
+            except Exception as q_exc:
+                print(f"[Fyers quotes error] {index_key} ({cfg['symbol']}): {q_exc}")
+
             resp = fyers.history(data=payload)
             if isinstance(resp, dict) and resp.get("s") == "ok" and resp.get("candles"):
                 cols = ["epoch", "open", "high", "low", "close", "volume"]
@@ -58,6 +76,8 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10, allow_fyers: b
                 df["epoch"] = pd.to_numeric(df["epoch"], errors="coerce")
                 df = df.dropna(subset=["epoch"]).drop_duplicates(subset=["epoch"]).sort_values("epoch").reset_index(drop=True)
                 df["timestamp_ist"] = pd.to_datetime(df["epoch"], unit="s", utc=True).dt.tz_convert(IST).dt.strftime("%Y-%m-%d %H:%M:%S%z")
+                if live_quote:
+                    df.attrs["live_quote"] = live_quote
                 return df, "FYERS_LIVE_15M"
             print(f"[Fyers history non-ok] {index_key} ({cfg['symbol']}): {resp}")
         except Exception as exc:
