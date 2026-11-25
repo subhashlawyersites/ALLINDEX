@@ -96,3 +96,84 @@ def fyers_callback():
 
     save_access_token(access_token)
     return redirect("/")
+
+
+def get_fyers_config() -> dict:
+    creds = get_fyers_credentials()
+    token = load_access_token()
+    return {
+        "client_id": creds["client_id"],
+        "secret_key": creds["secret_key"],
+        "redirect_uri": creds["redirect_uri"],
+        "access_token": token,
+        "has_credentials": bool(creds["client_id"] and creds["secret_key"]),
+        "has_token": bool(token),
+    }
+
+
+def save_or_authorize_fyers(
+    client_id: str = "",
+    secret_key: str = "",
+    redirect_uri: str = "",
+    auth_code: str = "",
+    access_token: str = "",
+) -> dict:
+    creds = get_fyers_credentials()
+    cid = (client_id or creds["client_id"] or "").strip()
+    sec = (secret_key or creds["secret_key"] or "").strip()
+    ruri = (redirect_uri or creds["redirect_uri"] or "").strip()
+
+    if cid:
+        os.environ["FYERS_APP_ID"] = cid
+        os.environ["FYERS_CLIENT_ID"] = cid
+    if sec:
+        os.environ["FYERS_SECRET_KEY"] = sec
+    if ruri:
+        os.environ["FYERS_REDIRECT_URI"] = ruri
+
+    tok = (access_token or "").strip()
+    code = (auth_code or "").strip()
+
+    if code and not tok:
+        if not cid or not sec:
+            return {"ok": False, "error": "Missing FYERS_APP_ID or FYERS_SECRET_KEY"}
+        session = fyersModel.SessionModel(
+            client_id=cid,
+            secret_key=sec,
+            redirect_uri=ruri,
+            response_type="code",
+            grant_type="authorization_code",
+        )
+        session.set_token(code)
+        resp = session.generate_token()
+        if isinstance(resp, dict):
+            tok = (resp.get("access_token") or "").strip()
+        if not tok:
+            return {"ok": False, "error": f"Token exchange failed: {resp}"}
+
+    if tok:
+        save_access_token(tok)
+        return {"ok": True, "access_token": tok}
+
+    return {"ok": False, "error": "No auth_code or access_token provided"}
+
+
+def test_fyers_connection() -> dict:
+    creds = get_fyers_credentials()
+    token = load_access_token()
+    if not creds["client_id"] or not token:
+        return {"ok": False, "message": "Missing FYERS_APP_ID or FYERS_ACCESS_TOKEN"}
+    auth_token = token if ":" in token else f"{creds['client_id']}:{token}"
+    try:
+        client = fyersModel.FyersModel(
+            client_id=creds["client_id"],
+            is_async=False,
+            token=auth_token,
+            log_path="",
+        )
+        profile = client.get_profile()
+        if isinstance(profile, dict) and profile.get("s") == "ok":
+            return {"ok": True, "message": "Fyers connection active", "profile": profile.get("data", {})}
+        return {"ok": False, "message": f"Fyers check failed: {profile}"}
+    except Exception as exc:
+        return {"ok": False, "message": f"Fyers check error: {exc}"}
