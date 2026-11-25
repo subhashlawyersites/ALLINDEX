@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 import math
 import sys
 import pandas as pd
@@ -69,6 +69,89 @@ def _load_trades_df(mode_key: str = "refined") -> pd.DataFrame:
     return df
 
 
+def _normalize_hhmm(val: str) -> str:
+    s = str(val or "").strip()
+    if not s:
+        return ""
+    parts = s.split(":")
+    if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+        return f"{int(parts[0]):02d}:{int(parts[1]):02d}"
+    return s
+
+
+def _resolve_date_bounds(
+    df_dates: pd.Series,
+    preset: str = "",
+    from_date: str = "",
+    to_date: str = "",
+) -> tuple[str, str]:
+    p = str(preset or "").strip().lower()
+    eff_from = str(from_date or "").strip()
+    eff_to = str(to_date or "").strip()
+
+    valid_dates = sorted(d for d in df_dates.dropna().astype(str).unique() if d and d.lower() != "nan")
+    anchor_str = eff_to or (valid_dates[-1] if valid_dates else "")
+    anchor_ts = pd.to_datetime(anchor_str, errors="coerce")
+
+    if p and p != "all" and pd.notna(anchor_ts):
+        if not eff_to:
+            eff_to = anchor_ts.strftime("%Y-%m-%d")
+        if not eff_from:
+            if p == "today":
+                eff_from = anchor_ts.strftime("%Y-%m-%d")
+            elif p == "7d":
+                eff_from = (anchor_ts - pd.Timedelta(days=6)).strftime("%Y-%m-%d")
+            elif p == "30d":
+                eff_from = (anchor_ts - pd.Timedelta(days=29)).strftime("%Y-%m-%d")
+            elif p == "mtd":
+                eff_from = anchor_ts.replace(day=1).strftime("%Y-%m-%d")
+
+    return eff_from, eff_to
+
+
+def _compute_target_achieved_pct(df: pd.DataFrame) -> pd.Series:
+    if df is None or df.empty:
+        return pd.Series(dtype=float)
+    entry = pd.to_numeric(df.get("entry_price"), errors="coerce")
+    target = pd.to_numeric(df.get("target_price"), errors="coerce")
+    exit_p = pd.to_numeric(df.get("exit_price"), errors="coerce")
+    direction = df.get("direction", pd.Series("", index=df.index)).astype(str).str.upper()
+
+    target_dist = (target - entry).abs()
+    fallback_move = pd.Series(0.0, index=df.index, dtype=float)
+    is_call = direction == "CALL"
+    is_put = direction == "PUT"
+    fallback_move = fallback_move.where(~is_call, (exit_p - entry).clip(lower=0.0))
+    fallback_move = fallback_move.where(~is_put, (entry - exit_p).clip(lower=0.0))
+
+    if "mfe_pts" in df.columns:
+        mfe = pd.to_numeric(df["mfe_pts"], errors="coerce")
+        fav_pts = mfe.where(mfe.notna() & (mfe >= 0), fallback_move)
+    else:
+        fav_pts = fallback_move
+
+    pct = (fav_pts / target_dist.replace(0, float("nan"))) * 100.0
+    return pct.fillna(0.0).round(1)
+
+
+def _target_bucket_label(pct_val: float) -> str:
+    try:
+        v = float(pct_val)
+    except Exception:
+        return "<50%"
+    if v < 50.0:
+        return "<50%"
+    if v < 60.0:
+        return "50-59%"
+    if v < 70.0:
+        return "60-69%"
+    if v < 80.0:
+        return "70-79%"
+    if v < 100.0:
+        return "80-99%"
+    return "100%+"
+
+
 def build_historical_analytics(
     scope: str = "all",
     mode: str = "refined",
@@ -79,33 +162,85 @@ def build_historical_analytics(
     exit_filter: str = "",
     sort_by: str = "session_date",
     sort_dir: str = "desc",
+    from_date: str = "",
+    to_date: str = "",
+    from_time: str = "",
+    to_time: str = "",
+    preset: str = "",
+    min_target_pct: float | None = None,
+    target_bucket: str = "",
 ) -> dict:
     mode_key = "refined" if str(mode).lower() == "refined" else "baseline"
     all_df = _load_trades_df(mode_key)
     scope_upper = scope.upper()
 
+    if not all_df.empty:
+        all_parsed = pd.to_datetime(all_df["session_date"], format="ISO8601", errors="coerce")
+        all_df["_iso_date"] = all_parsed.dt.strftime("%Y-%m-%d").fillna(all_df["session_date"].astype(str))
+        all_df["_hhmm"] = all_df["entry_time"].astype(str).map(_normalize_hhmm)
+        all_df["_target_pct"] = _compute_target_achieved_pct(all_df)
+        all_df["_target_bucket"] = all_df["_target_pct"].map(_target_bucket_label)
+    else:
+        all_df["_iso_date"] = pd.Series(dtype=str)
+        all_df["_hhmm"] = pd.Series(dtype=str)
+        all_df["_target_pct"] = pd.Series(dtype=float)
+        all_df["_target_bucket"] = pd.Series(dtype=str)
+
     if scope_upper != "ALL" and scope_upper in INDEX_CONFIGS:
-        df = all_df[all_df["index"].str.upper() == scope_upper].copy()
+        df = all_df[all_df["index"].astype(str).str.upper() == scope_upper].copy()
     else:
         df = all_df.copy()
 
-    filtered = df.copy()
-    if weekday_filter:
-        filtered = filtered[filtered["weekday"].str.lower() == weekday_filter.lower()]
-    if direction_filter:
-        filtered = filtered[filtered["direction"].str.upper() == direction_filter.upper()]
-    if exit_filter:
-        filtered = filtered[filtered["exit_reason"].str.upper() == exit_filter.upper()]
+    if df.empty:
+        df["_iso_date"] = pd.Series(dtype=str)
+        df["_hhmm"] = pd.Series(dtype=str)
 
-    chrono = filtered.sort_values(["session_date", "entry_time"]).reset_index(drop=True)
+    eff_from_date, eff_to_date = _resolve_date_bounds(
+        df["_iso_date"] if "_iso_date" in df.columns else pd.Series(dtype=str),
+        preset=preset,
+        from_date=from_date,
+        to_date=to_date,
+    )
+    eff_from_time = _normalize_hhmm(from_time)
+    eff_to_time = _normalize_hhmm(to_time)
+
+    filtered = df.copy()
+    if not filtered.empty:
+        if weekday_filter:
+            filtered = filtered[filtered["weekday"].astype(str).str.lower() == weekday_filter.lower()]
+        if direction_filter:
+            filtered = filtered[filtered["direction"].astype(str).str.upper() == direction_filter.upper()]
+        if exit_filter:
+            filtered = filtered[filtered["exit_reason"].astype(str).str.upper() == exit_filter.upper()]
+        if eff_from_date:
+            filtered = filtered[filtered["_iso_date"] >= eff_from_date]
+        if eff_to_date:
+            filtered = filtered[filtered["_iso_date"] <= eff_to_date]
+        if eff_from_time:
+            filtered = filtered[filtered["_hhmm"] >= eff_from_time]
+        if eff_to_time:
+            filtered = filtered[filtered["_hhmm"] <= eff_to_time]
+        if min_target_pct is not None:
+            filtered = filtered[filtered["_target_pct"] >= float(min_target_pct)]
+        if target_bucket and str(target_bucket).strip().upper() != "ALL":
+            filtered = filtered[filtered["_target_bucket"].astype(str).str.upper() == str(target_bucket).strip().upper()]
+
+    chrono_cols = [c for c in ["_iso_date", "_hhmm", "index"] if c in filtered.columns]
+    chrono = filtered.sort_values(chrono_cols or ["session_date", "entry_time"], ascending=True).reset_index(drop=True)
 
     sort_col_key = sort_by if sort_by in SORT_COLUMNS else "session_date"
     sort_cols = SORT_COLUMNS[sort_col_key]
     asc = str(sort_dir).lower() == "asc"
     if sort_col_key == "session_date":
-        log_df = filtered.sort_values(sort_cols, ascending=[asc, asc]).reset_index(drop=True)
+        effective_cols = [c for c in ["_iso_date", "_hhmm", "index"] if c in filtered.columns]
+        log_df = filtered.sort_values(effective_cols, ascending=[asc] * len(effective_cols)).reset_index(drop=True)
     else:
-        log_df = filtered.sort_values(sort_cols, ascending=[asc] + [False] * (len(sort_cols) - 1)).reset_index(drop=True)
+        tie_cols = [c for c in ["_iso_date", "_hhmm", "index"] if c in filtered.columns and c not in sort_cols]
+        full_cols = sort_cols + tie_cols
+        log_df = filtered.sort_values(
+            full_cols,
+            ascending=[asc] + [False] * (len(full_cols) - 1),
+        ).reset_index(drop=True)
 
     total_trades = int(len(chrono))
     wins = int((chrono["points"] > 0).sum()) if total_trades else 0
@@ -193,13 +328,26 @@ def build_historical_analytics(
 
     comparison = []
     for k, cfg in INDEX_CONFIGS.items():
-        sub = all_df[all_df["index"].str.upper() == k]
+        sub = all_df[all_df["index"].astype(str).str.upper() == k]
         if weekday_filter:
-            sub = sub[sub["weekday"].str.lower() == weekday_filter.lower()]
+            sub = sub[sub["weekday"].astype(str).str.lower() == weekday_filter.lower()]
         if direction_filter:
-            sub = sub[sub["direction"].str.upper() == direction_filter.upper()]
+            sub = sub[sub["direction"].astype(str).str.upper() == direction_filter.upper()]
         if exit_filter:
-            sub = sub[sub["exit_reason"].str.upper() == exit_filter.upper()]
+            sub = sub[sub["exit_reason"].astype(str).str.upper() == exit_filter.upper()]
+        if not sub.empty:
+            if eff_from_date:
+                sub = sub[sub["_iso_date"] >= eff_from_date]
+            if eff_to_date:
+                sub = sub[sub["_iso_date"] <= eff_to_date]
+            if eff_from_time:
+                sub = sub[sub["_hhmm"] >= eff_from_time]
+            if eff_to_time:
+                sub = sub[sub["_hhmm"] <= eff_to_time]
+            if min_target_pct is not None:
+                sub = sub[sub["_target_pct"] >= float(min_target_pct)]
+            if target_bucket and str(target_bucket).strip().upper() != "ALL":
+                sub = sub[sub["_target_bucket"].astype(str).str.upper() == str(target_bucket).strip().upper()]
         c_n = int(len(sub))
         c_win = round(float((sub["points"] > 0).mean() * 100.0), 1) if c_n else 0.0
         c_avg_r = round(float(sub["r_val"].mean()), 2) if c_n else 0.0
@@ -241,7 +389,23 @@ def build_historical_analytics(
             "exit_reason": r["exit_reason"],
             "points": round(pts_v, 2),
             "r_val": round(float(r["r_val"]), 2),
+            "target_achieved_pct": round(float(r.get("_target_pct", 0.0)), 1),
+            "target_bucket": str(r.get("_target_bucket", "<50%")),
             "outcome": "WIN" if pts_v > 0 else "LOSS",
+        })
+
+    bucket_order = ["<50%", "50-59%", "60-69%", "70-79%", "80-99%", "100%+"]
+    target_levels = []
+    for b_name in bucket_order:
+        b_sub = filtered[filtered["_target_bucket"] == b_name] if not filtered.empty and "_target_bucket" in filtered.columns else pd.DataFrame()
+        b_n = int(len(b_sub))
+        target_levels.append({
+            "bucket": b_name,
+            "trades": b_n,
+            "win_pct": round(float((b_sub["points"] > 0).mean() * 100.0), 1) if b_n else 0.0,
+            "avg_r": round(float(b_sub["r_val"].mean()), 2) if b_n else 0.0,
+            "cum_r": round(float(b_sub["r_val"].sum()), 2) if b_n else 0.0,
+            "cum_pts": round(float(b_sub["points"].sum()), 2) if b_n else 0.0,
         })
 
     return {
@@ -276,6 +440,7 @@ def build_historical_analytics(
         "weekdays": weekday_stats,
         "exits": exit_stats,
         "comparison": comparison,
+        "target_levels": target_levels,
         "pagination": {
             "page": page,
             "per_page": per_page,

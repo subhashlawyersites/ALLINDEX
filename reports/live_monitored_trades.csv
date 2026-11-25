@@ -1,2 +1,2 @@
-index,session_date,weekday,entry_time,exit_time,direction,entry_price,sl_price,target_price,exit_price,exit_reason,points,r_val,source_tag
-FINNIFTY,2026-11-24,Tuesday,20:52,15:15,CALL,28149.95,28149.95,28150.55,28149.95,EXIT_SL,0.0,0.0,LIVE_MONITOR
+index,session_date,weekday,entry_time,exit_time,direction,entry_price,sl_price,target_price,exit_price,exit_reason,points,r_val,max_favorable_pct,max_adverse_pct,milestones_hit,source_tag
+FINNIFTY,2026-11-24,Tuesday,20:52,15:15,CALL,28149.95,28149.95,28150.55,28149.95,EXIT_SL,0.0,0.0,,,,LIVE_MONITOR

@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 import json
 from pathlib import Path
 from typing import Optional
@@ -18,7 +18,8 @@ LIVE_TRADES_CSV = REPORT_DIR / "live_monitored_trades.csv"
 LIVE_COLUMNS = [
     "index", "session_date", "weekday", "entry_time", "exit_time",
     "direction", "entry_price", "sl_price", "target_price", "exit_price",
-    "exit_reason", "points", "r_val", "source_tag"
+    "exit_reason", "points", "r_val", "max_favorable_pct", "max_adverse_pct",
+    "milestones_hit", "source_tag"
 ]
 
 
@@ -36,7 +37,13 @@ def _save_json(path: Path, payload) -> None:
 
 
 def record_event(index_key: str, event_type: str, message: str, severity: str = "warn") -> dict:
-    events = _load_json(EVENTS_LOG_PATH, [])
+    raw_events = _load_json(EVENTS_LOG_PATH, [])
+    if isinstance(raw_events, dict) and isinstance(raw_events.get("events"), list):
+        events = list(raw_events["events"])
+    elif isinstance(raw_events, list):
+        events = list(raw_events)
+    else:
+        events = []
     now_ist = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST")
     ev = {
         "id": f"{int(datetime.now(IST).timestamp() * 1000)}_{len(events) + 1}",
@@ -97,6 +104,8 @@ def start_monitored_trade(
         "risk_pts": round(risk, 2),
         "opened_at": now_ist.strftime("%Y-%m-%d %H:%M:%S IST"),
         "milestones_hit": [],
+        "max_favorable_pct": 0.0,
+        "max_adverse_pct": 0.0,
     }
     trades[key] = rec
     _save_json(ACTIVE_TRADES_PATH, trades)
@@ -131,8 +140,35 @@ def _append_closed_trade_to_csv(rec: dict, exit_price: float, exit_reason: str, 
         "source_tag": "LIVE_MONITOR",
     }
 
+    fav_pct = float(rec.get("max_favorable_pct", 0.0) or 0.0)
+    adv_pct = float(rec.get("max_adverse_pct", 0.0) or 0.0)
+    cur_pct = (pts / e_val * 100.0) if e_val else 0.0
+    if cur_pct > fav_pct:
+        fav_pct = cur_pct
+    if cur_pct < adv_pct:
+        adv_pct = cur_pct
+
+    row["max_favorable_pct"] = round(fav_pct, 2)
+    row["max_adverse_pct"] = round(adv_pct, 2)
+    row["milestones_hit"] = ",".join(str(m) for m in sorted(set(rec.get("milestones_hit", []))))
+
     existing = pd.read_csv(LIVE_TRADES_CSV) if LIVE_TRADES_CSV.exists() else pd.DataFrame(columns=LIVE_COLUMNS)
-    updated = pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
+    for col in LIVE_COLUMNS:
+        if col not in existing.columns:
+            existing[col] = None
+
+    dup_mask = (
+        (existing["index"].astype(str) == str(row["index"]))
+        & (existing["session_date"].astype(str) == str(row["session_date"]))
+        & (existing["entry_time"].astype(str) == str(row["entry_time"]))
+        & (existing["direction"].astype(str) == str(row["direction"]))
+    )
+    new_df = pd.DataFrame([row])[LIVE_COLUMNS]
+    if not existing.empty and dup_mask.any():
+        existing.loc[dup_mask, LIVE_COLUMNS] = new_df.values
+        updated = existing[LIVE_COLUMNS]
+    else:
+        updated = pd.concat([existing[LIVE_COLUMNS], new_df], ignore_index=True)
     updated.to_csv(LIVE_TRADES_CSV, index=False)
     return row
 
@@ -182,6 +218,22 @@ def evaluate_monitored_trades_against_market(latest_prices: dict[str, dict]) -> 
         tgt_v = float(rec["target_price"])
         entry_v = float(rec["entry_price"])
         risk = max(0.01, float(rec.get("risk_pts") or abs(entry_v - sl_v) or 1.0))
+
+        if entry_v > 0:
+            if d == "CALL":
+                fav_move = ((high_v - entry_v) / entry_v) * 100.0
+                adv_move = ((low_v - entry_v) / entry_v) * 100.0
+            else:
+                fav_move = ((entry_v - low_v) / entry_v) * 100.0
+                adv_move = ((entry_v - high_v) / entry_v) * 100.0
+            prev_fav = float(rec.get("max_favorable_pct", 0.0) or 0.0)
+            prev_adv = float(rec.get("max_adverse_pct", 0.0) or 0.0)
+            next_fav = round(max(prev_fav, fav_move), 2)
+            next_adv = round(min(prev_adv, adv_move), 2)
+            if next_fav != prev_fav or next_adv != prev_adv:
+                rec["max_favorable_pct"] = next_fav
+                rec["max_adverse_pct"] = next_adv
+                changed = True
 
         # Check milestones (50%, 60%, 80%, 100%)
         hit_set = set(rec.get("milestones_hit", []))

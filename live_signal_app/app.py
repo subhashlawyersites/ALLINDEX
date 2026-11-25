@@ -16,6 +16,7 @@ from trade_monitor import (
     close_monitored_trade,
     evaluate_monitored_trades_against_market,
     get_active_trades,
+    start_monitored_trade,
     get_recent_events,
     record_event,
     start_monitored_trade,
@@ -104,6 +105,19 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
             record_event(key, "GAP_EXCLUDED", f"Session gap <= -0.75% on {key}", "bad")
         elif st["status"].startswith("CONFIRMED_"):
             record_event(key, st["status"], f"{key} confirmed {st['status']} @ {st['entry_price']}", "good")
+            conf_dir = st.get("armed_dir") or ("PUT" if st["status"].endswith("PUT") else "CALL")
+            entry_p = st.get("entry_price")
+            sl_p = st.get("stop_price")
+            if entry_p is not None and sl_p is not None and key not in get_active_trades():
+                start_monitored_trade(
+                    index_key=key,
+                    direction=conf_dir,
+                    entry_price=float(entry_p),
+                    sl_price=float(sl_p),
+                    session_date=st.get("session_date"),
+                    weekday=st.get("weekday"),
+                    entry_time=st.get("last_bar_time"),
+                )
 
         sources[key] = src
         states.append(st)
@@ -372,6 +386,14 @@ def api_analytics(scope: str):
     exit_reason = request.args.get("exit_reason", "")
     sort_by = request.args.get("sort_by", "session_date")
     sort_dir = request.args.get("sort_dir", "desc")
+    from_date = request.args.get("from_date", "")
+    to_date = request.args.get("to_date", "")
+    from_time = request.args.get("from_time", "")
+    to_time = request.args.get("to_time", "")
+    preset = request.args.get("preset", "")
+    target_bucket = request.args.get("target_bucket", "")
+    min_target_raw = request.args.get("min_target_pct", "").strip()
+    min_target_pct = float(min_target_raw) if min_target_raw else None
     data = build_historical_analytics(
         scope=scope,
         mode=mode,
@@ -382,6 +404,13 @@ def api_analytics(scope: str):
         exit_filter=exit_reason,
         sort_by=sort_by,
         sort_dir=sort_dir,
+        from_date=from_date,
+        to_date=to_date,
+        from_time=from_time,
+        to_time=to_time,
+        preset=preset,
+        min_target_pct=min_target_pct,
+        target_bucket=target_bucket,
     )
     return jsonify(data)
 

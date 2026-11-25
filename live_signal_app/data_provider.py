@@ -68,11 +68,20 @@ def _acquire_fyers_slot() -> bool:
     return True
 
 
+# Optional extra windows for special exchange sessions: ("YYYY-MM-DD", "HH:MM", "HH:MM")
+SPECIAL_SESSION_WINDOWS: list[tuple[str, str, str]] = []
+
+
 def _is_equity_session_open(now_ist: datetime) -> bool:
-    if now_ist.weekday() >= 5:
-        return False
     mins = now_ist.hour * 60 + now_ist.minute
-    return (9 * 60 + 15) <= mins <= (15 * 60 + 30)
+    if (9 * 60 + 15) <= mins <= (15 * 60 + 30):
+        return True
+    day_str = now_ist.strftime("%Y-%m-%d")
+    hm_str = now_ist.strftime("%H:%M")
+    for sess_date, start_hm, end_hm in SPECIAL_SESSION_WINDOWS:
+        if day_str == sess_date and start_hm <= hm_str <= end_hm:
+            return True
+    return False
 
 
 def _merge_live_quote_into_df(df: pd.DataFrame, live_quote: dict, now_ist: datetime) -> pd.DataFrame:
@@ -117,30 +126,53 @@ def _save_disk_history_cache(cache_obj: dict) -> None:
         pass
 
 
+CSV_BAR_COLUMNS = [
+    "epoch", "open", "high", "low", "close", "volume", "timestamp_ist", "weekday"
+]
+
+
+def _normalize_bar_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=CSV_BAR_COLUMNS)
+    out = df.copy()
+    for col in ["epoch", "open", "high", "low", "close", "volume"]:
+        if col not in out.columns:
+            out[col] = 0
+        out[col] = pd.to_numeric(out[col], errors="coerce")
+    out = out.dropna(subset=["epoch"]).copy()
+    out["epoch"] = out["epoch"].astype("int64")
+    out = out.drop_duplicates(subset=["epoch"], keep="last").sort_values("epoch").reset_index(drop=True)
+    dt_ist = pd.to_datetime(out["epoch"], unit="s", utc=True).dt.tz_convert(IST)
+    out["timestamp_ist"] = dt_ist.dt.strftime("%Y-%m-%d %H:%M:%S%z")
+    out["weekday"] = dt_ist.dt.day_name()
+    return out[CSV_BAR_COLUMNS]
+
+
 def _load_csv_fallback(index_key: str) -> pd.DataFrame:
     csv_path = DATA_DIR / INDEX_CONFIGS[index_key]["csv_file"]
     if not csv_path.exists():
         raise FileNotFoundError(f"Missing fallback CSV: {csv_path}")
-    return pd.read_csv(csv_path)
+    return _normalize_bar_df(pd.read_csv(csv_path))
+
+
+def _persist_bars_to_csv(index_key: str, merged_df: pd.DataFrame) -> pd.DataFrame:
+    norm = _normalize_bar_df(merged_df)
+    if norm.empty:
+        return norm
+    csv_path = DATA_DIR / INDEX_CONFIGS[index_key]["csv_file"]
+    try:
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        norm.to_csv(csv_path, index=False)
+    except Exception as exc:
+        print(f"[CSV persist warning] {index_key} ({csv_path}): {exc}")
+    return norm
 
 
 def _candles_to_df(candles: list) -> pd.DataFrame:
     cols = ["epoch", "open", "high", "low", "close", "volume"]
     raw = [c[:6] for c in candles]
     df = pd.DataFrame(raw, columns=cols)
-    df["epoch"] = pd.to_numeric(df["epoch"], errors="coerce")
-    df = (
-        df.dropna(subset=["epoch"])
-        .drop_duplicates(subset=["epoch"])
-        .sort_values("epoch")
-        .reset_index(drop=True)
-    )
-    df["timestamp_ist"] = (
-        pd.to_datetime(df["epoch"], unit="s", utc=True)
-        .dt.tz_convert(IST)
-        .dt.strftime("%Y-%m-%d %H:%M:%S%z")
-    )
-    return df
+    return _normalize_bar_df(df)
 
 
 def fetch_latest_candles(index_key: str, lookback_days: int = 10, allow_fyers: bool = True) -> tuple[pd.DataFrame, str]:
@@ -214,40 +246,67 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10, allow_fyers: b
                         df_out.attrs["live_quote"] = live_quote
                     return df_out, cached_hist[2]
 
+                base_csv_df = _load_csv_fallback(index_key)
+                last_epoch = int(base_csv_df["epoch"].max()) if not base_csv_df.empty else None
                 to_dt = now_ist - timedelta(minutes=1)
-                from_dt = now_ist - timedelta(days=lookback_days)
-                payload = {
-                    "symbol": cfg["symbol"],
-                    "resolution": "15",
-                    "date_format": "1",
-                    "range_from": from_dt.strftime("%Y-%m-%d"),
-                    "range_to": to_dt.strftime("%Y-%m-%d"),
-                    "cont_flag": "1",
-                }
-                today_str = now_ist.strftime("%Y-%m-%d")
-                is_historical_only = payload["range_to"] < today_str
-                hist_cache_key = f"{cfg['symbol']}_15_{payload['range_from']}_{payload['range_to']}"
-                disk_cache = _load_disk_history_cache() if is_historical_only else {}
-
-                if is_historical_only and hist_cache_key in disk_cache:
-                    resp = disk_cache[hist_cache_key]
-                elif _acquire_fyers_slot():
-                    resp = fyers.history(data=payload)
-                    if is_historical_only and isinstance(resp, dict) and resp.get("s") == "ok" and resp.get("candles"):
-                        disk_cache[hist_cache_key] = resp
-                        _save_disk_history_cache(disk_cache)
+                if last_epoch is not None:
+                    anchor_dt = datetime.fromtimestamp(last_epoch, tz=IST) - timedelta(days=1)
+                    from_dt = min(anchor_dt, to_dt)
                 else:
-                    resp = None
+                    from_dt = to_dt - timedelta(days=max(1, int(lookback_days)))
 
-                if _is_rate_limited(resp):
-                    _note_rate_limit(f"history {index_key}", resp)
-                    if cached_hist is not None:
-                        df_out = _merge_live_quote_into_df(cached_hist[1], live_quote, now_ist)
-                        if live_quote:
-                            df_out.attrs["live_quote"] = live_quote
-                        return df_out, cached_hist[2]
-                elif isinstance(resp, dict) and resp.get("s") == "ok" and resp.get("candles"):
-                    df_base = _candles_to_df(resp["candles"])
+                today_str = now_ist.strftime("%Y-%m-%d")
+                disk_cache = _load_disk_history_cache()
+                disk_dirty = False
+                collected_chunks: list[pd.DataFrame] = []
+                hit_limit = False
+
+                cur_start = from_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+                end_day = to_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+                chunk_span = timedelta(days=30)
+
+                while cur_start <= end_day:
+                    cur_end = min(cur_start + chunk_span, end_day)
+                    payload = {
+                        "symbol": cfg["symbol"],
+                        "resolution": "15",
+                        "date_format": "1",
+                        "range_from": cur_start.strftime("%Y-%m-%d"),
+                        "range_to": cur_end.strftime("%Y-%m-%d"),
+                        "cont_flag": "1",
+                    }
+                    is_historical_only = payload["range_to"] < today_str
+                    hist_cache_key = f"{cfg['symbol']}_15_{payload['range_from']}_{payload['range_to']}"
+
+                    if is_historical_only and hist_cache_key in disk_cache:
+                        resp = disk_cache[hist_cache_key]
+                    elif _acquire_fyers_slot():
+                        resp = fyers.history(data=payload)
+                        if is_historical_only and isinstance(resp, dict) and resp.get("s") == "ok" and resp.get("candles"):
+                            disk_cache[hist_cache_key] = resp
+                            disk_dirty = True
+                    else:
+                        resp = None
+
+                    if _is_rate_limited(resp):
+                        _note_rate_limit(f"history {index_key}", resp)
+                        hit_limit = True
+                        break
+                    if isinstance(resp, dict) and resp.get("s") == "ok" and resp.get("candles"):
+                        collected_chunks.append(_candles_to_df(resp["candles"]))
+                    elif resp is not None:
+                        print(f"[Fyers history non-ok] {index_key} ({cfg['symbol']}): {resp}")
+
+                    cur_start = cur_end + timedelta(days=1)
+
+                if disk_dirty:
+                    _save_disk_history_cache(disk_cache)
+
+                if collected_chunks:
+                    combined_frames = [base_csv_df] + (
+                        [cached_hist[1]] if cached_hist is not None and not cached_hist[1].empty else []
+                    ) + collected_chunks
+                    df_base = _persist_bars_to_csv(index_key, pd.concat(combined_frames, ignore_index=True))
                     with _CACHE_LOCK:
                         _HISTORY_CACHE[index_key] = (time.monotonic(), df_base.copy(), "FYERS_LIVE_15M")
                         _SESSION_CANDLES[index_key] = df_base.copy()
@@ -255,8 +314,12 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10, allow_fyers: b
                     if live_quote:
                         df_out.attrs["live_quote"] = live_quote
                     return df_out, "FYERS_LIVE_15M"
-                elif resp is not None:
-                    print(f"[Fyers history non-ok] {index_key} ({cfg['symbol']}): {resp}")
+
+                if hit_limit and cached_hist is not None:
+                    df_out = _merge_live_quote_into_df(cached_hist[1], live_quote, now_ist)
+                    if live_quote:
+                        df_out.attrs["live_quote"] = live_quote
+                    return df_out, cached_hist[2]
             except Exception as exc:
                 print(f"[Fyers history error] {index_key} ({cfg['symbol']}): {exc}")
 
