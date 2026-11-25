@@ -334,6 +334,7 @@
 <script>
 window.switchLiveFeedIndex = async function(indexKey) {
   return window.runIdempotentAction("switch_feed_" + String(indexKey || ""), async () => {
+  return window.runIdempotentAction("switch_feed_" + String(indexKey || ""), async () => {
   if (!indexKey) return;
   const k = String(indexKey).trim().toUpperCase();
   const lbl = document.getElementById("topActiveFeedName");
