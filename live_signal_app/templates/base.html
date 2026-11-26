@@ -197,7 +197,69 @@
     }
     @keyframes allindexSpin { to { transform: rotate(360deg); } }
     .is-busy-action { opacity: 0.65; pointer-events: none; }
-  </style>
+  
+  /* Global spinning loader & previous-value delta flash */
+  @keyframes globalSpin {
+    to { transform: rotate(360deg); }
+  }
+  .global-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(148, 163, 184, 0.35);
+    border-top-color: #38bdf8;
+    border-radius: 50%;
+    animation: globalSpin 0.7s linear infinite;
+    vertical-align: middle;
+  }
+  .global-spinner-lg {
+    width: 28px;
+    height: 28px;
+    border-width: 3px;
+  }
+  #globalLoaderBar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #38bdf8, #22c55e);
+    transform-origin: left;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 9999;
+  }
+  #globalLoaderBar.active {
+    opacity: 1;
+  }
+  #globalNavOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.32);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9998;
+    pointer-events: none;
+  }
+  #globalNavOverlay.active {
+    display: flex;
+  }
+  .delta-up {
+    background-color: rgba(34, 197, 94, 0.28) !important;
+    transition: background-color 0.25s ease;
+  }
+  .delta-down {
+    background-color: rgba(239, 68, 68, 0.28) !important;
+    transition: background-color 0.25s ease;
+  }
+  .delta-fade {
+    background-color: transparent !important;
+    transition: background-color 1.1s ease;
+  }
+
+</style>
 </head>
 <body>
   <div id="slowLoadOverlay" aria-live="polite">
@@ -645,5 +707,124 @@
   }, 4000);
 
 </script>
+
+<div id="globalLoaderBar" aria-hidden="true"></div>
+<div id="globalNavOverlay" aria-hidden="true">
+  <span class="global-spinner global-spinner-lg"></span>
+</div>
+<script>
+(function () {
+  const bar = document.getElementById("globalLoaderBar");
+  const overlay = document.getElementById("globalNavOverlay");
+  let inflightCount = 0;
+  let safetyTimer = null;
+
+  function syncGlobalLoader() {
+    const active = inflightCount > 0;
+    if (bar) bar.classList.toggle("active", active);
+    if (safetyTimer) clearTimeout(safetyTimer);
+    if (active) {
+      safetyTimer = setTimeout(() => {
+        inflightCount = 0;
+        if (bar) bar.classList.remove("active");
+        if (overlay) overlay.classList.remove("active");
+      }, 12000);
+    }
+  }
+
+  function showPageLoader() {
+    if (bar) bar.classList.add("active");
+    if (overlay) overlay.classList.add("active");
+    setTimeout(() => {
+      if (overlay) overlay.classList.remove("active");
+    }, 6000);
+  }
+
+  window.setValueLoading = function (el, isLoading) {
+    if (!el) return;
+    let badge = el.querySelector(".val-inline-spinner");
+    if (isLoading) {
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "global-spinner val-inline-spinner";
+        badge.style.width = "12px";
+        badge.style.height = "12px";
+        badge.style.marginLeft = "6px";
+        el.appendChild(badge);
+      }
+    } else if (badge) {
+      badge.remove();
+    }
+  };
+
+  function parseNumericValue(raw) {
+    if (raw === null || raw === undefined) return NaN;
+    const cleaned = String(raw).replace(/[^0-9.+-]/g, "");
+    if (!cleaned || cleaned === "." || cleaned === "-" || cleaned === "+") return NaN;
+    const num = parseFloat(cleaned);
+    return Number.isFinite(num) ? num : NaN;
+  }
+
+  window.applyDeltaFlash = function (el, nextVal) {
+    if (!el) return;
+    const num = typeof nextVal === "number" ? nextVal : parseNumericValue(nextVal);
+    if (!Number.isFinite(num)) return;
+    const prevAttr = el.dataset.prevNum;
+    el.dataset.prevNum = String(num);
+    if (prevAttr === undefined) return;
+    const prev = parseFloat(prevAttr);
+    if (!Number.isFinite(prev) || num === prev) return;
+
+    el.classList.remove("delta-up", "delta-down", "delta-fade");
+    const cls = num > prev ? "delta-up" : "delta-down";
+    el.classList.add(cls);
+
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        el.classList.remove(cls);
+        el.classList.add("delta-fade");
+        setTimeout(() => el.classList.remove("delta-fade"), 1150);
+      }, 220);
+    });
+  };
+
+  if (typeof window.fetch === "function" && !window.__fetchWrappedForLoader) {
+    const origFetch = window.fetch.bind(window);
+    window.fetch = async function (...args) {
+      inflightCount += 1;
+      syncGlobalLoader();
+      try {
+        return await origFetch(...args);
+      } finally {
+        inflightCount = Math.max(0, inflightCount - 1);
+        syncGlobalLoader();
+      }
+    };
+    window.__fetchWrappedForLoader = true;
+  }
+
+  document.addEventListener("submit", () => showPageLoader(), true);
+  window.addEventListener("beforeunload", () => showPageLoader());
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        const target = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+        if (!target) continue;
+        const tracked = target.closest("[data-track-delta]");
+        if (tracked) {
+          window.applyDeltaFlash(tracked, tracked.textContent);
+        }
+      }
+    });
+    observer.observe(document.body, {
+      subtree: true,
+      characterData: true,
+      childList: true,
+    });
+  });
+})();
+</script>
+
 </body>
 </html>
