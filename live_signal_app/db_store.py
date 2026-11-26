@@ -277,3 +277,76 @@ def enqueue_live_trade_upsert(trade: dict[str, Any]) -> None:
         _DB_QUEUE.put_nowait(("trade", dict(trade)))
     except Exception:
         pass
+
+def upsert_candles_15m(index_name: str, rows: list[dict[str, Any]]) -> int:
+    idx_key = str(index_name or "").strip().upper()
+    if not idx_key or not rows:
+        return 0
+
+    records = []
+    for r in rows:
+        try:
+            ep = int(r["epoch"])
+            o = float(r["open"])
+            h = float(r["high"])
+            l = float(r["low"])
+            c = float(r["close"])
+            v = int(float(r.get("volume") or 0))
+            ts_ist = str(r.get("timestamp_ist") or "")
+            wkday = str(r.get("weekday") or "")
+            records.append((idx_key, ep, ts_ist, wkday, o, h, l, c, v))
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    if not records:
+        return 0
+
+    sql = """
+        insert into public.candles_15m (
+            index_name, epoch, timestamp_ist, weekday, open, high, low, close, volume
+        ) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        on conflict (index_name, epoch)
+        do update set
+            timestamp_ist = excluded.timestamp_ist,
+            weekday = excluded.weekday,
+            open = excluded.open,
+            high = excluded.high,
+            low = excluded.low,
+            close = excluded.close,
+            volume = excluded.volume,
+            updated_at = now()
+    """
+    conn = get_db_connection()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.executemany(sql, records)
+        return len(records)
+    finally:
+        conn.close()
+
+
+def load_candles_15m(index_name: str, limit: int = 8000) -> list[dict[str, Any]]:
+    idx_key = str(index_name or "").strip().upper()
+    if not idx_key:
+        return []
+    safe_limit = max(1, min(int(limit or 8000), 50000))
+    sql = """
+        select epoch, timestamp_ist, weekday, open, high, low, close, volume
+        from (
+            select epoch, timestamp_ist, weekday, open, high, low, close, volume
+            from public.candles_15m
+            where index_name = %s
+            order by epoch desc
+            limit %s
+        ) sub
+        order by epoch asc
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, (idx_key, safe_limit))
+            cols = [desc[0] for desc in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+    finally:
+        conn.close()

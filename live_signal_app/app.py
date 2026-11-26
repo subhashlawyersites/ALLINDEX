@@ -437,8 +437,16 @@ def api_analytics(scope: str):
     to_time = request.args.get("to_time", "")
     preset = request.args.get("preset", "")
     target_bucket = request.args.get("target_bucket", "")
+    source = request.args.get("source", "both")
     min_target_raw = request.args.get("min_target_pct", "").strip()
     min_target_pct = float(min_target_raw) if min_target_raw else None
+    def _opt_flt(name: str) -> float | None:
+        raw = request.args.get(name, "").strip()
+        return float(raw) if raw else None
+    min_points = _opt_flt("min_points")
+    max_points = _opt_flt("max_points")
+    min_r_pct = _opt_flt("min_r_pct")
+    max_r_pct = _opt_flt("max_r_pct")
     data = build_historical_analytics(
         scope=scope,
         mode=mode,
@@ -456,8 +464,17 @@ def api_analytics(scope: str):
         preset=preset,
         min_target_pct=min_target_pct,
         target_bucket=target_bucket,
+        source=source,
+        min_points=min_points,
+        max_points=max_points,
+        min_r_pct=min_r_pct,
+        max_r_pct=max_r_pct,
     )
     return jsonify(data)
+
+
+_LAST_SWITCH_FETCH: dict[str, float] = {}
+_SWITCH_COOLDOWN_SEC = 10.0
 
 
 @app.route("/api/feed/active", methods=["GET", "POST"])
@@ -469,8 +486,33 @@ def api_feed_active():
         ).strip().upper()
         if target not in INDEX_CONFIGS:
             return jsonify({"ok": False, "error": f"Unknown index: {target}"}), 400
+
+        prev_active = get_active_feed_index()
         active = set_active_feed_index(target)
-        return jsonify({"ok": True, "active_index": active})
+
+        now_mono = time.monotonic()
+        last_ts = _LAST_SWITCH_FETCH.get(active, 0.0)
+        hydrated = False
+        source = None
+        if (now_mono - last_ts) >= _SWITCH_COOLDOWN_SEC:
+            _LAST_SWITCH_FETCH[active] = now_mono
+            try:
+                _, source = fetch_latest_candles(
+                    active,
+                    allow_fyers=True,
+                    force_refresh=True,
+                )
+                hydrated = True
+            except Exception as exc:
+                print(f"[Feed switch catch-up warning] {active} (from {prev_active}): {exc}")
+
+        return jsonify({
+            "ok": True,
+            "previous_index": prev_active,
+            "active_index": active,
+            "hydrated": hydrated,
+            "source": source,
+        })
     return jsonify({"ok": True, "active_index": get_active_feed_index()})
 
 

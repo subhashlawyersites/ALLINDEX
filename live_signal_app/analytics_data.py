@@ -28,7 +28,7 @@ SORT_COLUMNS = {
 }
 
 
-def _load_trades_df(mode_key: str = "refined") -> pd.DataFrame:
+def _load_local_trades_df(mode_key: str = "refined") -> pd.DataFrame:
     report_file = REPORT_DIR / ("refined_trades_1y.csv" if mode_key == "refined" else "sma2_sma10_color60_1y_trades.csv")
 
     if report_file.exists():
@@ -57,16 +57,117 @@ def _load_trades_df(mode_key: str = "refined") -> pd.DataFrame:
             "exit_reason", "points", "r_val"
         ])
 
-    # Merge any newly closed trades from live/paper trade_monitor so charts & log include them
+    if not df.empty and "data_source" not in df.columns:
+        df["data_source"] = "LOCAL"
+
     if LIVE_TRADES_CSV.exists():
         try:
             live_df = pd.read_csv(LIVE_TRADES_CSV)
             if not live_df.empty:
+                live_df["data_source"] = "LOCAL_LIVE"
                 df = pd.concat([df, live_df], ignore_index=True)
         except Exception:
             pass
 
     return df
+
+
+def _load_supabase_trades_df() -> pd.DataFrame:
+    cols = [
+        "index", "session_date", "weekday", "entry_time", "exit_time",
+        "direction", "entry_price", "sl_price", "target_price", "exit_price",
+        "exit_reason", "points", "r_val", "data_source"
+    ]
+    try:
+        from db_store import get_db_connection
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select index_name, session_date, weekday, bar_time, direction,
+                           entry_price, sl_price, target_price, last_close, status, payload
+                    from public.signals
+                    order by session_date desc, bar_time desc
+                    limit 2000
+                    """
+                )
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+    except Exception:
+        return pd.DataFrame(columns=cols)
+
+    records = []
+    for r in rows or []:
+        idx_name, sess_date, wkday, bar_time, direction, entry_p, sl_p, tgt_p, last_c, status, payload = r
+        p_dict = payload if isinstance(payload, dict) else {}
+        if not direction:
+            continue
+        ep = float(entry_p if entry_p is not None else (p_dict.get("entry_price") or 0.0))
+        xp = float(p_dict.get("exit_price") if p_dict.get("exit_price") is not None else (last_c or ep))
+        pts = float(p_dict.get("points") if p_dict.get("points") is not None else ((xp - ep) if str(direction).upper() == "CALL" else (ep - xp)))
+        r_val = float(p_dict.get("r_val") or 0.0)
+        records.append({
+            "index": str(idx_name or "").upper(),
+            "session_date": str(sess_date or ""),
+            "weekday": str(wkday or p_dict.get("weekday") or ""),
+            "entry_time": str(p_dict.get("entry_time") or bar_time or ""),
+            "exit_time": str(p_dict.get("exit_time") or bar_time or ""),
+            "direction": str(direction or "").upper(),
+            "entry_price": ep,
+            "sl_price": float(sl_p if sl_p is not None else (p_dict.get("sl_price") or ep)),
+            "target_price": float(tgt_p if tgt_p is not None else (p_dict.get("target_price") or ep)),
+            "exit_price": xp,
+            "exit_reason": str(p_dict.get("exit_reason") or status or ""),
+            "points": pts,
+            "r_val": r_val,
+            "data_source": "SUPABASE",
+        })
+    return pd.DataFrame(records, columns=cols) if records else pd.DataFrame(columns=cols)
+
+
+def _sanitize_and_dedup_trades_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    work = df.copy()
+    ex_s = work.get("exit_reason", pd.Series("", index=work.index)).astype(str).str.strip().str.upper()
+    ep = pd.to_numeric(work.get("entry_price"), errors="coerce").fillna(0.0)
+    sp = pd.to_numeric(work.get("sl_price"), errors="coerce").fillna(0.0)
+    hhmm = work.get("entry_time", pd.Series("", index=work.index)).astype(str).map(_normalize_hhmm)
+    bad_hhmm = hhmm.str.match(r"^\d{2}:\d{2}$") & ((hhmm < "09:15") | (hhmm > "15:30"))
+    valid_mask = ~ex_s.isin(["AVOID_DAY", "CONFIRMED_CALL", "CONFIRMED_PUT"]) & (ep > 0.0) & (sp > 0.0) & (ep != sp) & (~bad_hhmm)
+    work = work[valid_mask].copy()
+    if work.empty:
+        return work
+
+    src_rank = {"LOCAL_LIVE": 3, "LOCAL": 2, "SUPABASE": 1}
+    work["_src_rank"] = work.get("data_source", "LOCAL").astype(str).str.upper().map(src_rank).fillna(1)
+    work["_dedup_idx"] = work.get("index", "").astype(str).str.strip().str.upper()
+    work["_dedup_date"] = pd.to_datetime(work.get("session_date", ""), format="ISO8601", errors="coerce").dt.strftime("%Y-%m-%d").fillna(work.get("session_date", "").astype(str))
+    work["_dedup_dir"] = work.get("direction", "").astype(str).str.strip().str.upper()
+    work["_dedup_entry"] = pd.to_numeric(work.get("entry_price"), errors="coerce").round(2)
+    work["_non_null_score"] = work.notna().sum(axis=1)
+    work = work.sort_values(["_src_rank", "_non_null_score"], ascending=True).drop_duplicates(
+        subset=["_dedup_idx", "_dedup_date", "_dedup_dir", "_dedup_entry"],
+        keep="last",
+    )
+    drop_cols = [c for c in work.columns if c.startswith("_dedup_") or c in ("_src_rank", "_non_null_score")]
+    return work.drop(columns=drop_cols).reset_index(drop=True)
+
+
+def _load_trades_df(mode_key: str = "refined", source: str = "both") -> pd.DataFrame:
+    src_key = str(source or "both").strip().lower()
+    if src_key == "local":
+        df = _load_local_trades_df(mode_key)
+    elif src_key == "supabase":
+        df = _load_supabase_trades_df()
+    else:
+        local_df = _load_local_trades_df(mode_key)
+        sb_df = _load_supabase_trades_df()
+        frames = [f for f in (local_df, sb_df) if f is not None and not f.empty]
+        df = pd.concat(frames, ignore_index=True) if frames else local_df
+    return _sanitize_and_dedup_trades_df(df)
 
 
 def _normalize_hhmm(val: str) -> str:
@@ -169,9 +270,17 @@ def build_historical_analytics(
     preset: str = "",
     min_target_pct: float | None = None,
     target_bucket: str = "",
+    source: str = "both",
+    min_points: float | None = None,
+    max_points: float | None = None,
+    min_r_pct: float | None = None,
+    max_r_pct: float | None = None,
 ) -> dict:
     mode_key = "refined" if str(mode).lower() == "refined" else "baseline"
-    all_df = _load_trades_df(mode_key)
+    source_key = str(source or "both").strip().lower()
+    if source_key not in ("both", "local", "supabase"):
+        source_key = "both"
+    all_df = _load_trades_df(mode_key, source=source_key)
     scope_upper = scope.upper()
 
     if not all_df.empty:
@@ -224,6 +333,21 @@ def build_historical_analytics(
             filtered = filtered[filtered["_target_pct"] >= float(min_target_pct)]
         if target_bucket and str(target_bucket).strip().upper() != "ALL":
             filtered = filtered[filtered["_target_bucket"].astype(str).str.upper() == str(target_bucket).strip().upper()]
+        pts_s = pd.to_numeric(filtered.get("points"), errors="coerce")
+        r_pct_s = pd.to_numeric(filtered.get("r_val"), errors="coerce") * 100.0
+        if min_points is not None:
+            filtered = filtered[pts_s >= float(min_points)]
+            pts_s = pd.to_numeric(filtered.get("points"), errors="coerce")
+            r_pct_s = pd.to_numeric(filtered.get("r_val"), errors="coerce") * 100.0
+        if max_points is not None:
+            filtered = filtered[pts_s <= float(max_points)]
+            pts_s = pd.to_numeric(filtered.get("points"), errors="coerce")
+            r_pct_s = pd.to_numeric(filtered.get("r_val"), errors="coerce") * 100.0
+        if min_r_pct is not None:
+            filtered = filtered[r_pct_s >= float(min_r_pct)]
+            r_pct_s = pd.to_numeric(filtered.get("r_val"), errors="coerce") * 100.0
+        if max_r_pct is not None:
+            filtered = filtered[r_pct_s <= float(max_r_pct)]
 
     chrono_cols = [c for c in ["_iso_date", "_hhmm", "index"] if c in filtered.columns]
     chrono = filtered.sort_values(chrono_cols or ["session_date", "entry_time"], ascending=True).reset_index(drop=True)
@@ -391,6 +515,7 @@ def build_historical_analytics(
             "r_val": round(float(r["r_val"]), 2),
             "target_achieved_pct": round(float(r.get("_target_pct", 0.0)), 1),
             "target_bucket": str(r.get("_target_bucket", "<50%")),
+            "data_source": str(r.get("data_source") or ("SUPABASE" if source_key == "supabase" else "LOCAL")),
             "outcome": "WIN" if pts_v > 0 else "LOSS",
         })
 
@@ -411,6 +536,7 @@ def build_historical_analytics(
     return {
         "scope": scope_upper,
         "mode": mode_key,
+        "source": source_key,
         "sort_by": sort_col_key,
         "sort_dir": "asc" if asc else "desc",
         "summary": {

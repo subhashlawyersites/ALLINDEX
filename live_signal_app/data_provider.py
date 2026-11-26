@@ -148,11 +148,42 @@ def _normalize_bar_df(df: pd.DataFrame) -> pd.DataFrame:
     return out[CSV_BAR_COLUMNS]
 
 
+def _load_supabase_candles(index_key: str) -> pd.DataFrame:
+    try:
+        from db_store import load_candles_15m
+        rows = load_candles_15m(index_key, limit=8000)
+        if not rows:
+            return pd.DataFrame()
+        return _normalize_bar_df(pd.DataFrame(rows))
+    except Exception as exc:
+        print(f"[Supabase candle load warning] {index_key}: {exc}")
+        return pd.DataFrame()
+
+
+def _sync_candles_to_supabase(index_key: str, norm_df: pd.DataFrame) -> None:
+    if norm_df is None or norm_df.empty:
+        return
+    try:
+        from db_store import upsert_candles_15m
+        records = norm_df.tail(500).to_dict(orient="records")
+        upsert_candles_15m(index_key, records)
+    except Exception as exc:
+        print(f"[Supabase candle sync warning] {index_key}: {exc}")
+
+
 def _load_csv_fallback(index_key: str) -> pd.DataFrame:
     csv_path = DATA_DIR / INDEX_CONFIGS[index_key]["csv_file"]
-    if not csv_path.exists():
-        raise FileNotFoundError(f"Missing fallback CSV: {csv_path}")
-    return _normalize_bar_df(pd.read_csv(csv_path))
+    csv_df = pd.DataFrame()
+    if csv_path.exists():
+        csv_df = _normalize_bar_df(pd.read_csv(csv_path))
+    db_df = _load_supabase_candles(index_key)
+    if not csv_df.empty and not db_df.empty:
+        return _normalize_bar_df(pd.concat([csv_df, db_df], ignore_index=True))
+    if not db_df.empty:
+        return db_df
+    if not csv_df.empty:
+        return csv_df
+    raise FileNotFoundError(f"Missing fallback CSV and Supabase candles for: {index_key}")
 
 
 def _persist_bars_to_csv(index_key: str, merged_df: pd.DataFrame) -> pd.DataFrame:
@@ -165,6 +196,7 @@ def _persist_bars_to_csv(index_key: str, merged_df: pd.DataFrame) -> pd.DataFram
         norm.to_csv(csv_path, index=False)
     except Exception as exc:
         print(f"[CSV persist warning] {index_key} ({csv_path}): {exc}")
+    _sync_candles_to_supabase(index_key, norm)
     return norm
 
 
@@ -257,7 +289,7 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10, allow_fyers: b
                     live_quote = dict(cached_quote[1])
 
                 eff_hist_ttl = HISTORY_TTL_SEC if _is_equity_session_open(datetime.now(IST)) else max(HISTORY_TTL_SEC, 900.0)
-                if cached_hist is not None and (now_mono - cached_hist[0]) < eff_hist_ttl:
+                if not force_refresh and cached_hist is not None and (now_mono - cached_hist[0]) < eff_hist_ttl:
                     df_out = _merge_live_quote_into_df(cached_hist[1], live_quote, now_ist)
                     if live_quote:
                         df_out.attrs["live_quote"] = live_quote

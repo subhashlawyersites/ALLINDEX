@@ -12,3 +12,6 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+live_signal_app/.fyers_token.json
+live_signal_app/.active_feed_index.json
+reports/*.bak

@@ -203,6 +203,15 @@
           <option value="exit_reason">Sort: Exit Reason</option>
           <option value="direction">Sort: Direction</option>
         </select>
+        <input id="fMinPts" type="number" step="any" class="ctrl" style="width:92px;" placeholder="Min Pts" onchange="reloadIndexAnalytics(1)" />
+        <input id="fMaxPts" type="number" step="any" class="ctrl" style="width:92px;" placeholder="Max Pts" onchange="reloadIndexAnalytics(1)" />
+        <input id="fMinRPct" type="number" step="any" class="ctrl" style="width:92px;" placeholder="Min R%" onchange="reloadIndexAnalytics(1)" />
+        <input id="fMaxRPct" type="number" step="any" class="ctrl" style="width:92px;" placeholder="Max R%" onchange="reloadIndexAnalytics(1)" />
+        <select id="fSource" class="ctrl" onchange="reloadIndexAnalytics(1)">
+          <option value="both" selected>Source: Both</option>
+          <option value="local">Source: Local</option>
+          <option value="supabase">Source: Supabase</option>
+        </select>
         <select id="fSortDir" class="ctrl" onchange="reloadIndexAnalytics(1)">
           <option value="desc" selected>Desc</option>
           <option value="asc">Asc</option>
@@ -234,6 +243,11 @@
 
 {% block scripts %}
 <script>
+  function setHtmlIfExists(id, html) {
+    let el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+  }
+
   const IDX_KEY = "{{ state.index_key }}";
   const TARGET_LADDER = {{ state.target_ladder | tojson }};
   const LAST_CLOSE = {{ state.last_close | tojson }};
@@ -349,12 +363,17 @@
     const bestW = s.best_weekday ? `${s.best_weekday.weekday} (${s.best_weekday.points >= 0 ? '+' : ''}${s.best_weekday.points})` : 'N/A';
     const worstW = s.worst_weekday ? `${s.worst_weekday.weekday} (${s.worst_weekday.points})` : 'N/A';
 
-    document.getElementById("kpiGrid").innerHTML = `
+    {
+      el = document.getElementById("kpiGrid");
+      if (el) {
+        el.innerHTML = `
       <div class="card"><div class="muted">Session Date Net Points</div><div style="margin-top:6px;">Best: <span class="pos">${bestS}</span></div><div>Weakest: <span class="neg">${worstS}</span></div></div>
       <div class="card"><div class="muted">Cumulative Points &amp; R</div><div style="margin-top:6px;">Net: <strong>${s.cum_pts >= 0 ? '+' : ''}${s.cum_pts} pts</strong> (${s.cum_r >= 0 ? '+' : ''}${s.cum_r}R)</div><div>Peak Pts: <strong>+${s.peak_pts}</strong></div></div>
-      <div class="card"><div class="muted">Weekday Performance (Mon-Fri)</div><div style="margin-top:6px;">Best: <span class="pos">${bestW}</span></div><div>Weakest: <span>${worstW}</span></div></div>
+      <div class="card"><div class="muted">Weekday Performance (Mon?Fri)</div><div style="margin-top:6px;">Best: <span class="pos">${bestW}</span></div><div>Weakest: <span>${worstW}</span></div></div>
       <div class="card"><div class="muted">Win / Loss &amp; CALL / PUT Mix</div><div style="margin-top:6px;">WIN: <strong>${s.wins} (${s.win_rate}%)</strong> &middot; LOSS: <strong>${s.losses} (${s.loss_rate}%)</strong></div><div>CALL: <strong>${s.call_cnt} (${s.call_pct}%)</strong> &middot; PUT: <strong>${s.put_cnt} (${s.put_pct}%)</strong></div></div>
     `;
+      }
+    };
 
     ["curve", "weekday", "exit", "winLoss", "callPut"].forEach(k => { if (charts[k]) charts[k].destroy(); });
 
@@ -422,20 +441,40 @@
     const p = data.pagination;
     curPage = p.page;
     totalPages = p.total_pages;
-    document.getElementById("pageInfo").textContent = `Page ${p.page} of ${p.total_pages} (${p.total_rows} trades)`;
-    document.getElementById("prevBtn").disabled = p.page <= 1;
-    document.getElementById("nextBtn").disabled = p.page >= p.total_pages;
+        const pg = data.pagination || {};
+    curPage = Number(pg.page || 1);
+    totalPages = Math.max(1, Number(pg.total_pages || 1));
+    const prevEl = document.getElementById("prevBtn");
+    const nextEl = document.getElementById("nextBtn");
+    if (prevEl) {
+      prevEl.removeAttribute("data-lock-until");
+      prevEl.disabled = curPage <= 1;
+    }
+    if (nextEl) {
+      nextEl.removeAttribute("data-lock-until");
+      nextEl.disabled = curPage >= totalPages;
+    }
+    document.getElementById("pageInfo").textContent = `Page ${pg.page} of ${pg.total_pages} (${pg.total_rows} trades)`;
+    document.getElementById("prevBtn").disabled = pg.page <= 1;
+    document.getElementById("nextBtn").disabled = pg.page >= pg.total_pages;
 
-    document.getElementById("tradeLogBody").innerHTML = p.rows.map(r => `
+    {
+      el = document.getElementById("tradeLogBody");
+      const list = typeof rows !== "undefined" ? rows : (pg.rows || []);
+      if (el) {
+        el.innerHTML = list.length ? list.map(r => `
       <tr>
         <td><strong>${r.session_date}</strong><br><span class="muted">${r.weekday}</span></td>
+        <td>${r.index ? `${r.index} &middot; ` : ""}${r.direction}</td>
         <td><span class="badge ${r.direction === 'CALL' ? 'good' : 'warn'}">${r.direction}</span></td>
         <td>${r.entry_time} &rarr; ${r.exit_time}</td>
         <td>${r.entry_price} / ${r.sl_price} / ${r.target_price}</td>
         <td>${r.exit_reason}</td>
         <td class="${r.points >= 0 ? 'pos' : 'neg'}">${r.points >= 0 ? '+' : ''}${r.points} (${r.r_val >= 0 ? '+' : ''}${r.r_val}R)</td>
       </tr>
-    `).join("") || `<tr><td colspan="6" class="muted">No trades match the selected filters.</td></tr>`;
+    `).join("") : `<tr><td colspan="6" class="muted">No trades match the selected filters.</td></tr>`;
+      }
+    }
   }
 
   async function reloadIndexAnalytics(page = 1) {
@@ -445,15 +484,29 @@
     const exitReason = document.getElementById("fExit").value;
     const sortBy = document.getElementById("fSortBy").value;
     const sortDir = document.getElementById("fSortDir").value;
-    const params = new URLSearchParams({ mode, page, per_page: 12, weekday, direction, exit_reason: exitReason, sort_by: sortBy, sort_dir: sortDir });
+    const source = (document.getElementById("fSource") || { value: "both" }).value;
+    const min_points = (document.getElementById("fMinPts") || { value: "" }).value;
+    const max_points = (document.getElementById("fMaxPts") || { value: "" }).value;
+    const min_r_pct = (document.getElementById("fMinRPct") || { value: "" }).value;
+    const max_r_pct = (document.getElementById("fMaxRPct") || { value: "" }).value;
+    const params = new URLSearchParams({ mode, page, per_page: 12, weekday, direction, exit_reason: exitReason, sort_by: sortBy, sort_dir: sortDir, source, min_points, max_points, min_r_pct, max_r_pct });
     const res = await fetch(`/api/analytics/${IDX_KEY.toLowerCase()}?${params.toString()}`);
     const data = await res.json();
     renderIndexData(data);
   }
 
   function changeIndexPage(delta) {
+    ["prevBtn", "nextBtn"].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.removeAttribute("data-lock-until");
+        btn.disabled = false;
+      }
+    });
     const next = curPage + delta;
-    if (next >= 1 && next <= totalPages) reloadIndexAnalytics(next);
+    if (next >= 1 && next <= totalPages) {
+      reloadIndexAnalytics(next);
+    }
   }
 
   window.onLiveStatusUpdate = function(data) {
