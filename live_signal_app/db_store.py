@@ -138,7 +138,8 @@ def insert_alert(
 ) -> None:
     canon_time = _canonical_bar_time(alert_time) or str(alert_time or "").strip()
     d_val = direction if direction in ("CALL", "PUT") else None
-    uid = f"{index_name}_{session_date}_{canon_time}_{alert_type}_{d_val or 'NONE'}"
+    trig_part = f"{float(trigger_price):.2f}" if trigger_price is not None else "NA"
+    uid = f"{index_name}_{session_date}_{alert_type}_{d_val or 'NONE'}_{trig_part}"
     conn = get_db_connection()
     try:
         with conn:
@@ -154,7 +155,7 @@ def insert_alert(
                         r_level = excluded.r_level,
                         trigger_price = excluded.trigger_price,
                         message = excluded.message,
-                        delivered = excluded.delivered,
+                        delivered = public.alerts.delivered or excluded.delivered,
                         metadata = excluded.metadata
                     """,
                     (
