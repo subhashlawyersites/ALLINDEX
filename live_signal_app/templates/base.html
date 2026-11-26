@@ -259,6 +259,38 @@
     transition: background-color 1.1s ease;
   }
 
+
+  .spot-live-wrap { display: inline-flex; align-items: center; gap: 4px; position: relative; }
+  #topActiveFeedSpot { padding: 1px 6px; border-radius: 4px; }
+  .spot-mini-progress {
+    display: inline-block;
+    width: 34px;
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.25);
+    overflow: hidden;
+    position: relative;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+  .spot-mini-progress::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 45%;
+    background: #38bdf8;
+    border-radius: 999px;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+  .spot-mini-progress.loading::after {
+    animation: spotSlide 0.85s ease-in-out infinite;
+  }
+  @keyframes spotSlide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(240%); }
+  }
+
 </style>
 </head>
 <body>
@@ -279,7 +311,7 @@
     <div class="feed-group">
       <span class="badge good" id="topFeedAlertBadge">LIVE FEED</span>
       <strong id="topFeedAllottedText">Live Feed Connection Allotted to {{ active_feed_index or 'NIFTY50' }}</strong>
-      <span>&middot; Spot: <strong id="topActiveFeedSpot" class="pos">--</strong></span>
+      <span class="spot-live-wrap">&middot; Spot: <strong id="topActiveFeedSpot" class="pos" data-track-delta>--</strong><span id="topFeedSpotSpinner" class="global-spinner" style="width:12px;height:12px;margin-left:6px;display:none;" aria-hidden="true"></span><span id="topFeedSpotBar" class="spot-mini-progress" aria-hidden="true"></span></span>
       <span class="muted" id="topActiveFeedMeta"></span>
     </div>
     <div class="feed-group">
@@ -684,7 +716,12 @@
         if (activeIdx) {
           const rawSpot = (activeIdx.spot_price != null) ? activeIdx.spot_price : activeIdx.last_close;
           const numSpot = Number(rawSpot);
-          if (spotBar) spotBar.textContent = Number.isFinite(numSpot) ? numSpot.toFixed(2) : String(rawSpot ?? "--");
+          if (spotBar) {
+            spotBar.textContent = Number.isFinite(numSpot) ? numSpot.toFixed(2) : String(rawSpot ?? "--");
+            if (Number.isFinite(numSpot) && typeof window.applyDeltaFlash === "function") {
+              window.applyDeltaFlash(spotBar, numSpot);
+            }
+          }
           if (metaBar) metaBar.textContent = `? ${activeIdx.status || ""} ? ${activeIdx.data_source || ""}`;
           if (typeof window.syncLiveChartWithIndex === "function" && Number.isFinite(numSpot)) {
             window.syncLiveChartWithIndex(activeIdx, numSpot, new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }));
@@ -824,6 +861,29 @@
     });
   });
 })();
+
+  window.setTopSpotLoading = function (isLoading) {
+    const sp = document.getElementById("topFeedSpotSpinner");
+    const pb = document.getElementById("topFeedSpotBar");
+    if (sp) sp.style.display = isLoading ? "inline-block" : "none";
+    if (pb) pb.classList.toggle("loading", Boolean(isLoading));
+  };
+
+  if (typeof window.fetch === "function" && !window.__spotFetchHooked) {
+    const _prevFetch = window.fetch.bind(window);
+    window.fetch = async function (...args) {
+      const urlStr = typeof args[0] === "string" ? args[0] : (args[0] && args[0].url) || "";
+      const touchesFeed = urlStr.includes("/api/status") || urlStr.includes("/api/feed") || urlStr.includes("/api/chart") || urlStr.includes("/api/watchlist");
+      if (touchesFeed) window.setTopSpotLoading(true);
+      try {
+        return await _prevFetch(...args);
+      } finally {
+        if (touchesFeed) setTimeout(() => window.setTopSpotLoading(false), 180);
+      }
+    };
+    window.__spotFetchHooked = true;
+  }
+
 </script>
 
 </body>

@@ -465,7 +465,10 @@
       const spotBar = document.getElementById("topActiveFeedSpot");
       if (spotBar && activeItem) {
         const v = Number((activeItem.spot_price != null) ? activeItem.spot_price : activeItem.last_close);
-        if (Number.isFinite(v)) spotBar.textContent = v.toFixed(2);
+        if (Number.isFinite(v)) {
+          spotBar.textContent = v.toFixed(2);
+          if (typeof window.applyDeltaFlash === "function") window.applyDeltaFlash(spotBar, v);
+        }
       }
     }
     if (!data || !Array.isArray(data.indices) || typeof IDX_KEY === "undefined") return;
