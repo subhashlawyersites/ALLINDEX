@@ -231,6 +231,19 @@
       </tr>
     `).join("");
 
+    const chartSig = JSON.stringify({
+      curve: data.curve,
+      weekdays: data.weekdays,
+      exits: data.exits,
+      win: s.wins,
+      loss: s.losses,
+      callPut: data.call_put || null
+    });
+    if (window.__lastCombinedChartSig === chartSig) {
+      return;
+    }
+    window.__lastCombinedChartSig = chartSig;
+
     Object.values(charts).forEach(ch => ch.destroy());
     charts = {};
 

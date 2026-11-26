@@ -28,7 +28,7 @@ _LAST_RATE_LOG = 0.0
 _LAST_FYERS_CALL_MONO = 0.0
 
 HISTORY_TTL_SEC = 120.0
-QUOTE_TTL_SEC = 10.0
+QUOTE_TTL_SEC = 25.0
 RATE_BACKOFF_SEC = 90.0
 MIN_FYERS_INTERVAL_SEC = 1.6
 
@@ -74,7 +74,7 @@ SPECIAL_SESSION_WINDOWS: list[tuple[str, str, str]] = []
 
 def _is_equity_session_open(now_ist: datetime) -> bool:
     mins = now_ist.hour * 60 + now_ist.minute
-    if (9 * 60 + 15) <= mins <= (15 * 60 + 30):
+    if now_ist.weekday() < 5 and (9 * 60 + 15) <= mins <= (15 * 60 + 30):
         return True
     day_str = now_ist.strftime("%Y-%m-%d")
     hm_str = now_ist.strftime("%H:%M")
