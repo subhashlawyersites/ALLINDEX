@@ -201,8 +201,10 @@ self.addEventListener("fetch", (event) => {
     return Response(sw_code, mimetype="application/javascript")
 
 
-@app.route("/")
+@app.route("/", methods=["GET", "HEAD"])
 def combined_dashboard():
+    if request.method == "HEAD":
+        return ("", 200)
     states, sources, fyers_status = _build_all_states()
     now_str = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST")
     return render_template(

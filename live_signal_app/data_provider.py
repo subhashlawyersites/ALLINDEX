@@ -27,10 +27,10 @@ _RATE_LIMIT_UNTIL = 0.0
 _LAST_RATE_LOG = 0.0
 _LAST_FYERS_CALL_MONO = 0.0
 
-HISTORY_TTL_SEC = 120.0
-QUOTE_TTL_SEC = 25.0
-RATE_BACKOFF_SEC = 90.0
-MIN_FYERS_INTERVAL_SEC = 1.6
+HISTORY_TTL_SEC = 180.0
+QUOTE_TTL_SEC = 30.0
+RATE_BACKOFF_SEC = 120.0
+MIN_FYERS_INTERVAL_SEC = 2.0
 
 HISTORY_DISK_CACHE_FILE = DATA_DIR / "fyers_history_cache.json"
 
@@ -211,36 +211,53 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10, allow_fyers: b
                 )
                 now_ist = datetime.now(IST)
 
+                session_open = _is_equity_session_open(now_ist)
+                eff_quote_ttl = QUOTE_TTL_SEC if session_open else max(QUOTE_TTL_SEC, 180.0)
                 live_quote = {}
-                if cached_quote is not None and (now_mono - cached_quote[0]) < QUOTE_TTL_SEC:
+                if cached_quote is not None and (now_mono - cached_quote[0]) < eff_quote_ttl:
                     live_quote = dict(cached_quote[1])
-                elif _acquire_fyers_slot():
+                elif session_open and _acquire_fyers_slot():
                     try:
-                        q_resp = fyers.quotes(data={"symbols": cfg["symbol"]})
+                        all_syms = ",".join(c["symbol"] for c in INDEX_CONFIGS.values() if c.get("symbol"))
+                        q_resp = fyers.quotes(data={"symbols": all_syms or cfg["symbol"]})
                         if _is_rate_limited(q_resp):
                             _note_rate_limit(f"quotes {index_key}", q_resp)
                             if cached_quote is not None:
                                 live_quote = dict(cached_quote[1])
-                        elif isinstance(q_resp, dict) and q_resp.get("s") == "ok" and q_resp.get("d"):
-                            v = q_resp["d"][0].get("v") or {}
-                            live_quote = {
-                                "symbol": cfg["symbol"],
-                                "ltp": v.get("lp"),
-                                "change": v.get("ch"),
-                                "change_pct": v.get("chp"),
-                                "high": v.get("high_price"),
-                                "low": v.get("low_price"),
-                                "prev_close": v.get("prev_close_price"),
-                                "updated_ist": now_ist.strftime("%Y-%m-%d %H:%M:%S IST"),
-                            }
+                        elif isinstance(q_resp, dict) and q_resp.get("s") == "ok" and isinstance(q_resp.get("d"), list):
+                            upd_str = now_ist.strftime("%Y-%m-%d %H:%M:%S IST")
+                            mono_now = time.monotonic()
+                            parsed_map: dict[str, dict] = {}
+                            for item in q_resp["d"]:
+                                if not isinstance(item, dict):
+                                    continue
+                                sym_name = str(item.get("n") or (item.get("v") or {}).get("symbol") or "").strip()
+                                v = item.get("v") or {}
+                                if sym_name:
+                                    parsed_map[sym_name] = {
+                                        "symbol": sym_name,
+                                        "ltp": v.get("lp"),
+                                        "change": v.get("ch"),
+                                        "change_pct": v.get("chp"),
+                                        "high": v.get("high_price"),
+                                        "low": v.get("low_price"),
+                                        "prev_close": v.get("prev_close_price"),
+                                        "updated_ist": upd_str,
+                                    }
                             with _CACHE_LOCK:
-                                _QUOTE_CACHE[cfg["symbol"]] = (time.monotonic(), dict(live_quote))
+                                for s_key, q_val in parsed_map.items():
+                                    _QUOTE_CACHE[s_key] = (mono_now, dict(q_val))
+                            if cfg["symbol"] in parsed_map:
+                                live_quote = dict(parsed_map[cfg["symbol"]])
+                            elif cached_quote is not None:
+                                live_quote = dict(cached_quote[1])
                     except Exception as q_exc:
                         print(f"[Fyers quotes error] {index_key} ({cfg['symbol']}): {q_exc}")
                 elif cached_quote is not None:
                     live_quote = dict(cached_quote[1])
 
-                if cached_hist is not None and (now_mono - cached_hist[0]) < HISTORY_TTL_SEC:
+                eff_hist_ttl = HISTORY_TTL_SEC if _is_equity_session_open(datetime.now(IST)) else max(HISTORY_TTL_SEC, 900.0)
+                if cached_hist is not None and (now_mono - cached_hist[0]) < eff_hist_ttl:
                     df_out = _merge_live_quote_into_df(cached_hist[1], live_quote, now_ist)
                     if live_quote:
                         df_out.attrs["live_quote"] = live_quote
