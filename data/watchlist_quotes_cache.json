@@ -1,0 +1,23 @@
+{
+  "saved_at_ist": "2026-11-26 16:23:49 IST",
+  "quotes": {
+    "MCX:CRUDEOIL26DECFUT": {
+      "ltp": 7838,
+      "change": 79,
+      "change_pct": 1.02,
+      "high": 7935,
+      "low": 7720,
+      "prev_close": 7759,
+      "feed_status": "LIVE"
+    },
+    "MCX:SILVER26DECFUT": {
+      "ltp": 146383,
+      "change": 3866,
+      "change_pct": 2.71,
+      "high": 148801,
+      "low": 145265,
+      "prev_close": 142517,
+      "feed_status": "LIVE"
+    }
+  }
+}

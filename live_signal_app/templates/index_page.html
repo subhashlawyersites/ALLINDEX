@@ -463,11 +463,19 @@
       const allottedEl = document.getElementById("topFeedAllottedText");
       if (allottedEl) allottedEl.textContent = `Live Feed Connection Allotted to ${activeKey}`;
       const spotBar = document.getElementById("topActiveFeedSpot");
+      if (typeof window.setMarketSessionOpen === "function") {
+        const openFlag = (data.market_open !== undefined) ? data.market_open : data.session_open;
+        if (typeof openFlag === "boolean") window.setMarketSessionOpen(openFlag);
+      }
       if (spotBar && activeItem) {
         const v = Number((activeItem.spot_price != null) ? activeItem.spot_price : activeItem.last_close);
         if (Number.isFinite(v)) {
           spotBar.textContent = v.toFixed(2);
-          if (typeof window.applyDeltaFlash === "function") window.applyDeltaFlash(spotBar, v);
+          if (typeof window.completeTopSpotInitialLoad === "function") {
+            window.completeTopSpotInitialLoad(spotBar, v);
+          } else if (typeof window.applyDeltaFlash === "function") {
+            window.applyDeltaFlash(spotBar, v);
+          }
         }
       }
     }
@@ -518,8 +526,12 @@
       pLblEl.textContent = idx.target_ladder.milestone_label || "Target Progress";
     }
 
-    if (typeof window.syncLiveChartWithIndex === "function") {
-      window.syncLiveChartWithIndex(idx, liveNum, new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }));
+    const sessionOpen = (typeof window.__marketSessionOpen === "boolean") ? window.__marketSessionOpen : true;
+    const barStamp = String(idx.last_bar_time || idx.bar_time || "").trim();
+    const chartSig = `${IDX_KEY}|${idx.session_date || ""}|${barStamp}|${liveNum}|${sessionOpen}`;
+    if (typeof window.syncLiveChartWithIndex === "function" && window.__lastChartSyncSig !== chartSig) {
+      window.__lastChartSyncSig = chartSig;
+      window.syncLiveChartWithIndex(idx, liveNum, barStamp);
     }
 
     const livePriceEl = document.querySelector(`[data-live-price="${IDX_KEY}"]`);

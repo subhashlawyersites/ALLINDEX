@@ -584,6 +584,7 @@
     window.syncLiveChartWithIndex = function(idx, spotVal, timeLabel) {
       const price = Number(spotVal);
       if (!idx || !Number.isFinite(price)) return;
+      const barTime = String(timeLabel || idx.last_bar_time || idx.bar_time || "").trim();
       const charts = [];
       if (window.Chart && typeof window.Chart.getChart === "function") {
         document.querySelectorAll("canvas").forEach(c => {
@@ -597,20 +598,24 @@
       charts.forEach(ch => {
         try {
           const ds = ch.data && ch.data.datasets && ch.data.datasets[0];
-          if (!ds || !Array.isArray(ds.data)) return;
-          const lbl = timeLabel || new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
-          if (Array.isArray(ch.data.labels)) {
-            const lastLbl = ch.data.labels[ch.data.labels.length - 1];
-            if (lastLbl === lbl && ds.data.length > 0) {
-              ds.data[ds.data.length - 1] = price;
-            } else {
-              ch.data.labels.push(lbl);
-              ds.data.push(price);
-              if (ch.data.labels.length > 60) ch.data.labels.shift();
-              if (ds.data.length > 60) ds.data.shift();
+          if (!ds || !Array.isArray(ds.data) || ds.data.length === 0) return;
+          const lastIdx = ds.data.length - 1;
+          if (Array.isArray(ch.data.labels) && ch.data.labels.length > 0) {
+            const lastLbl = String(ch.data.labels[lastIdx] || "").trim();
+            if (!barTime || lastLbl === barTime || window.__marketSessionOpen === false) {
+              if (ds.data[lastIdx] !== price) {
+                ds.data[lastIdx] = price;
+                ch.update("none");
+              }
+              return;
             }
+            ch.data.labels.push(barTime);
+            ds.data.push(price);
+            if (ch.data.labels.length > 60) ch.data.labels.shift();
+            if (ds.data.length > 60) ds.data.shift();
           } else {
-            ds.data[ds.data.length - 1] = price;
+            if (ds.data[lastIdx] === price) return;
+            ds.data[lastIdx] = price;
           }
           ch.update("none");
         } catch (_) {}
@@ -753,9 +758,36 @@
               window.completeTopSpotInitialLoad(spotBar, numSpot);
             }
           }
+          const fyersInfo = data.fyers || {};
+          const istParts = new Intl.DateTimeFormat("en-GB", {
+            timeZone: "Asia/Kolkata",
+            weekday: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false
+          }).formatToParts(new Date());
+          const wk = (istParts.find(x => x.type === "weekday") || {}).value || "";
+          const hh = Number((istParts.find(x => x.type === "hour") || {}).value || 0);
+          const mm = Number((istParts.find(x => x.type === "minute") || {}).value || 0);
+          const mins = hh * 60 + mm;
+          const isWeekday = !["Sat", "Sun"].includes(wk);
+          const withinMarketHours = isWeekday && mins >= (9 * 60 + 15) && mins <= (15 * 60 + 30);
+          const isClosed = (fyersInfo.market_open === false) || (fyersInfo.session_open === false) || !withinMarketHours;
+          if (typeof window.setMarketSessionOpen === "function") {
+            window.setMarketSessionOpen(!isClosed);
+          }
+          const spotEl = document.getElementById("topActiveFeedSpot");
+          if (spotEl && Number.isFinite(numSpot)) {
+            window.__lastSpotValue = numSpot;
+            spotEl.textContent = isClosed ? `${numSpot.toFixed(2)} ? Market closed` : numSpot.toFixed(2);
+            if (typeof window.completeTopSpotInitialLoad === "function") {
+              window.completeTopSpotInitialLoad(spotEl, numSpot);
+            }
+          }
           if (metaBar) metaBar.textContent = `? ${activeIdx.status || ""} ? ${activeIdx.data_source || ""}`;
+          const barTime = String(activeIdx.last_bar_time || activeIdx.bar_time || "").trim();
           if (typeof window.syncLiveChartWithIndex === "function" && Number.isFinite(numSpot)) {
-            window.syncLiveChartWithIndex(activeIdx, numSpot, new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }));
+            window.syncLiveChartWithIndex(activeIdx, numSpot, barTime);
           }
         }
 
@@ -911,16 +943,36 @@
     }
   };
 
+  window.__marketSessionOpen = true;
+  window.setMarketSessionOpen = function (isOpen) {
+    window.__marketSessionOpen = Boolean(isOpen);
+    if (!window.__marketSessionOpen) {
+      window.setTopSpotLoading(false, true);
+    }
+  };
+
   if (typeof window.fetch === "function" && !window.__spotFetchHooked) {
     const _prevFetch = window.fetch.bind(window);
     window.fetch = async function (...args) {
       const urlStr = typeof args[0] === "string" ? args[0] : (args[0] && args[0].url) || "";
       const touchesFeed = urlStr.includes("/api/status") || urlStr.includes("/api/feed") || urlStr.includes("/api/chart") || urlStr.includes("/api/watchlist");
-      if (touchesFeed) window.setTopSpotLoading(true);
+      const showSpinner = touchesFeed && (spotInitialPending || window.__marketSessionOpen);
+      if (showSpinner) window.setTopSpotLoading(true);
       try {
-        return await _prevFetch(...args);
+        const res = await _prevFetch(...args);
+        if (urlStr.includes("/api/status") && res && typeof res.clone === "function") {
+          res.clone().json().then((payload) => {
+            if (payload && typeof payload === "object") {
+              const openFlag = (payload.market_open !== undefined) ? payload.market_open : payload.session_open;
+              if (typeof openFlag === "boolean") window.setMarketSessionOpen(openFlag);
+            }
+          }).catch(() => {});
+        }
+        return res;
       } finally {
-        if (touchesFeed) setTimeout(() => window.setTopSpotLoading(false, false), 180);
+        if (touchesFeed) {
+          setTimeout(() => window.setTopSpotLoading(false, !window.__marketSessionOpen), 180);
+        }
       }
     };
     window.__spotFetchHooked = true;

@@ -159,18 +159,16 @@ def _append_closed_trade_to_csv(rec: dict, exit_price: float, exit_reason: str, 
         if col not in existing.columns:
             existing[col] = None
 
-    dup_mask = (
-        (existing["index"].astype(str) == str(row["index"]))
-        & (existing["session_date"].astype(str) == str(row["session_date"]))
-        & (existing["entry_time"].astype(str) == str(row["entry_time"]))
-        & (existing["direction"].astype(str) == str(row["direction"]))
-    )
     new_df = pd.DataFrame([row])[LIVE_COLUMNS]
-    if not existing.empty and dup_mask.any():
-        existing.loc[dup_mask, LIVE_COLUMNS] = new_df.values
-        updated = existing[LIVE_COLUMNS]
-    else:
-        updated = pd.concat([existing[LIVE_COLUMNS], new_df], ignore_index=True)
+    if not existing.empty:
+        dup_mask = (
+            (existing["index"].astype(str) == str(row["index"]))
+            & (existing["session_date"].astype(str) == str(row["session_date"]))
+            & (existing["entry_time"].astype(str) == str(row["entry_time"]))
+            & (existing["direction"].astype(str) == str(row["direction"]))
+        )
+        existing = existing.loc[~dup_mask, LIVE_COLUMNS]
+    updated = pd.concat([existing[LIVE_COLUMNS], new_df], ignore_index=True)
     updated.to_csv(LIVE_TRADES_CSV, index=False)
     return row
 

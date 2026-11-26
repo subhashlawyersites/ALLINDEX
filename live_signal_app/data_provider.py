@@ -175,7 +175,7 @@ def _candles_to_df(candles: list) -> pd.DataFrame:
     return _normalize_bar_df(df)
 
 
-def fetch_latest_candles(index_key: str, lookback_days: int = 10, allow_fyers: bool = True) -> tuple[pd.DataFrame, str]:
+def fetch_latest_candles(index_key: str, lookback_days: int = 10, allow_fyers: bool = True, force_refresh: bool = False) -> tuple[pd.DataFrame, str]:
     """
     Fetches recent 15m candles and live quotes from Fyers API v3 when allow_fyers=True
     and credentials are available, falling back to cached session bars or local CSVs.
@@ -297,7 +297,7 @@ def fetch_latest_candles(index_key: str, lookback_days: int = 10, allow_fyers: b
 
                     if is_historical_only and hist_cache_key in disk_cache:
                         resp = disk_cache[hist_cache_key]
-                    elif _acquire_fyers_slot():
+                    elif (session_open or force_refresh) and _acquire_fyers_slot():
                         resp = fyers.history(data=payload)
                         if is_historical_only and isinstance(resp, dict) and resp.get("s") == "ok" and resp.get("candles"):
                             disk_cache[hist_cache_key] = resp

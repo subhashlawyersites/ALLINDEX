@@ -37,15 +37,35 @@ def get_db_connection():
         return psycopg2.connect(db_url, connect_timeout=5)
 
 
+
+def _canonical_bar_time(ts_val: Any) -> str:
+    raw = str(ts_val or "").strip()
+    if not raw:
+        return ""
+    hh_mm = raw[:5]
+    parts = hh_mm.split(":")
+    if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+        hh = int(parts[0])
+        mm = (int(parts[1]) // 15) * 15
+        if 0 <= hh <= 23 and 0 <= mm <= 45:
+            return f"{hh:02d}:{mm:02d}"
+    return raw
+
+
 def upsert_signal(state: dict[str, Any]) -> None:
     idx_name = str(state.get("index_key") or state.get("index") or "").strip()
     sess_date = str(state.get("session_date") or "").strip()
-    bar_time = str(state.get("last_bar_time") or state.get("bar_time") or "").strip()
+    bar_time = _canonical_bar_time(state.get("last_bar_time") or state.get("bar_time"))
     status = str(state.get("status") or "WATCHING").strip()
     if not (idx_name and sess_date and bar_time):
         return
 
-    sig_dir = state.get("confirmed_dir") or state.get("armed_dir") or state.get("direction")
+    if status.endswith("_PUT"):
+        sig_dir = "PUT"
+    elif status.endswith("_CALL"):
+        sig_dir = "CALL"
+    else:
+        sig_dir = state.get("confirmed_dir") or state.get("armed_dir") or state.get("direction")
     if sig_dir not in ("CALL", "PUT"):
         sig_dir = None
 
@@ -116,8 +136,9 @@ def insert_alert(
     delivered: bool = False,
     metadata: Optional[dict[str, Any]] = None,
 ) -> None:
+    canon_time = _canonical_bar_time(alert_time) or str(alert_time or "").strip()
     d_val = direction if direction in ("CALL", "PUT") else None
-    uid = f"{index_name}_{session_date}_{alert_time}_{alert_type}_{d_val or 'NONE'}"
+    uid = f"{index_name}_{session_date}_{canon_time}_{alert_type}_{d_val or 'NONE'}"
     conn = get_db_connection()
     try:
         with conn:

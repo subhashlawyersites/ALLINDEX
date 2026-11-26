@@ -63,6 +63,41 @@ def set_active_feed_index(index_key: str) -> str:
     return _ACTIVE_FEED_KEY
 
 
+_LAST_ENQUEUED_SIGNAL_SIG: dict[str, str] = {}
+
+
+def _maybe_enqueue_signal_and_alert(st: dict, event_type: str | None = None, message: str | None = None) -> None:
+    idx_key = str(st.get("index_key") or "").strip()
+    sess_date = str(st.get("session_date") or "").strip()
+    bar_time = str(st.get("last_bar_time") or "").strip()
+    status = str(st.get("status") or "").strip()
+    sig_key = f"{idx_key}|{sess_date}|{bar_time}|{status}"
+    if idx_key and sess_date and bar_time and _LAST_ENQUEUED_SIGNAL_SIG.get(idx_key) != sig_key:
+        _LAST_ENQUEUED_SIGNAL_SIG[idx_key] = sig_key
+        enqueue_signal_upsert(st)
+
+    if event_type and message and idx_key and sess_date:
+        if status.endswith("_PUT"):
+            sig_dir = "PUT"
+        elif status.endswith("_CALL"):
+            sig_dir = "CALL"
+        else:
+            sig_dir = st.get("confirmed_dir") or st.get("armed_dir") or st.get("direction")
+        if sig_dir not in ("CALL", "PUT"):
+            sig_dir = None
+        enqueue_alert_insert(
+            index_name=idx_key,
+            session_date=sess_date,
+            alert_time=bar_time or datetime.now(IST).strftime("%H:%M"),
+            alert_type=event_type,
+            message=message,
+            direction=sig_dir,
+            trigger_price=st.get("entry_price") or st.get("last_close"),
+            delivered=False,
+            metadata={"status": status, "data_source": st.get("data_source")},
+        )
+
+
 def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
     states = []
     sources = {}
@@ -99,12 +134,20 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
             ),
         }
 
+        _ev_type = None
+        _ev_msg = None
         if st["avoid_today"]:
-            record_event(key, "AVOID_WEEKDAY", f"{st['weekday']} is avoidable for {key}", "warn")
+            _ev_type = "AVOID_WEEKDAY"
+            _ev_msg = f"{st['weekday']} is avoidable for {key}"
+            record_event(key, _ev_type, _ev_msg, "warn")
         elif st["gap_excluded"]:
-            record_event(key, "GAP_EXCLUDED", f"Session gap <= -0.75% on {key}", "bad")
+            _ev_type = "GAP_EXCLUDED"
+            _ev_msg = f"Session gap <= -0.75% on {key}"
+            record_event(key, _ev_type, _ev_msg, "bad")
         elif st["status"].startswith("CONFIRMED_"):
-            record_event(key, st["status"], f"{key} confirmed {st['status']} @ {st['entry_price']}", "good")
+            _ev_type = st["status"]
+            _ev_msg = f"{key} confirmed {st['status']} @ {st['entry_price']}"
+            record_event(key, _ev_type, _ev_msg, "good")
             conf_dir = st.get("armed_dir") or ("PUT" if st["status"].endswith("PUT") else "CALL")
             entry_p = st.get("entry_price")
             sl_p = st.get("stop_price")
@@ -118,7 +161,7 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
                     weekday=st.get("weekday"),
                     entry_time=st.get("last_bar_time"),
                 )
-
+        _maybe_enqueue_signal_and_alert(st, _ev_type, _ev_msg)
         sources[key] = src
         states.append(st)
 
