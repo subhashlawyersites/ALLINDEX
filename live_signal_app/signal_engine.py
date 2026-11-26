@@ -1,3 +1,6 @@
+from zoneinfo import ZoneInfo
+
+IST = ZoneInfo("Asia/Kolkata")
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Optional
@@ -186,17 +189,27 @@ def evaluate_index_signal(
     work["sma2"] = work["close"].rolling(COMMON_RULES["fast_sma"]).mean()
     work["sma10"] = work["close"].rolling(COMMON_RULES["slow_sma"]).mean()
 
+    now_ist = datetime.now(IST)
     last_row = work.iloc[-1]
     last_dt: datetime = last_row["datetime"]
     session_date = last_dt.strftime("%Y-%m-%d")
     weekday = last_dt.strftime("%A")
     last_bar_time = last_dt.strftime("%H:%M")
     last_close = round(float(last_row["close"]), 2)
-    sma2_val = round(float(last_row["sma2"]), 2) if pd.notna(last_row["sma2"]) else last_close
-    sma10_val = round(float(last_row["sma10"]), 2) if pd.notna(last_row["sma10"]) else last_close
+
+    closed_work = work[work["datetime"].apply(lambda d: is_15m_bar_closed(d, now_ist))].copy()
+    if closed_work.empty:
+        closed_work = work.iloc[:-1].copy() if len(work) > 1 else work.copy()
+
+    closed_work["sma2"] = closed_work["close"].rolling(COMMON_RULES["fast_sma"]).mean()
+    closed_work["sma10"] = closed_work["close"].rolling(COMMON_RULES["slow_sma"]).mean()
+    last_closed_row = closed_work.iloc[-1]
+    sma2_val = round(float(last_closed_row["sma2"]), 2) if pd.notna(last_closed_row["sma2"]) else last_close
+    sma10_val = round(float(last_closed_row["sma10"]), 2) if pd.notna(last_closed_row["sma10"]) else last_close
 
     avoid_today = weekday in cfg["avoid_weekdays"]
-    day_df = work[work["datetime"].dt.strftime("%Y-%m-%d") == session_date].copy()
+    day_df = closed_work[closed_work["datetime"].dt.strftime("%Y-%m-%d") == session_date].copy()
+    prev_all_df = closed_work[closed_work["datetime"].dt.strftime("%Y-%m-%d") < session_date].copy()
 
     gap_excluded = False
     gap_thresh = COMMON_RULES["gap_down_threshold_pct"]
@@ -239,8 +252,8 @@ def evaluate_index_signal(
         sma2 = cur_r["sma2"]
         sma10 = cur_r["sma10"]
 
-        if idx >= 1:
-            prev_r = day_df.iloc[idx - 1]
+        prev_r = day_df.iloc[idx - 1] if idx >= 1 else (prev_all_df.iloc[-1] if len(prev_all_df) >= 1 else None)
+        if prev_r is not None:
             prev_sma2 = prev_r["sma2"]
             prev_sma10 = prev_r["sma10"]
             if pd.notna(prev_sma2) and pd.notna(prev_sma10) and pd.notna(sma2) and pd.notna(sma10):
