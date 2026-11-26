@@ -342,7 +342,7 @@
     <div class="feed-group">
       <span class="badge good" id="topFeedAlertBadge">LIVE FEED</span>
       <strong id="topFeedAllottedText">Live Feed Connection Allotted to {{ active_feed_index or 'NIFTY50' }}</strong>
-      <span class="spot-live-wrap">&middot; Spot: <strong id="topActiveFeedSpot" class="pos" data-track-delta>--</strong><span id="topFeedSpotSpinner" class="global-spinner" style="width:12px;height:12px;margin-left:6px;display:none;" aria-hidden="true"></span><span id="topFeedSpotBar" class="spot-mini-progress" aria-hidden="true"></span></span>
+      <span class="spot-live-wrap" data-spot-initial-loading="1">&middot; Spot: <strong id="topActiveFeedSpot" class="pos" data-track-delta>--</strong><span id="topFeedSpotSpinner" class="global-spinner" style="width:12px;height:12px;margin-left:6px;display:inline-block;" aria-hidden="true"></span><span id="topFeedSpotBar" class="spot-mini-progress loading" aria-hidden="true"></span></span>
       <span class="muted" id="topActiveFeedMeta"></span>
     </div>
     <div class="feed-group">
@@ -749,8 +749,8 @@
           const numSpot = Number(rawSpot);
           if (spotBar) {
             spotBar.textContent = Number.isFinite(numSpot) ? numSpot.toFixed(2) : String(rawSpot ?? "--");
-            if (Number.isFinite(numSpot) && typeof window.applyDeltaFlash === "function") {
-              window.applyDeltaFlash(spotBar, numSpot);
+            if (Number.isFinite(numSpot) && typeof window.completeTopSpotInitialLoad === "function") {
+              window.completeTopSpotInitialLoad(spotBar, numSpot);
             }
           }
           if (metaBar) metaBar.textContent = `? ${activeIdx.status || ""} ? ${activeIdx.data_source || ""}`;
@@ -893,11 +893,22 @@
   });
 })();
 
-  window.setTopSpotLoading = function (isLoading) {
+  let spotInitialPending = true;
+
+  window.setTopSpotLoading = function (isLoading, markLoaded = false) {
+    if (markLoaded) spotInitialPending = false;
+    const active = Boolean(isLoading) || spotInitialPending;
     const sp = document.getElementById("topFeedSpotSpinner");
     const pb = document.getElementById("topFeedSpotBar");
-    if (sp) sp.style.display = isLoading ? "inline-block" : "none";
-    if (pb) pb.classList.toggle("loading", Boolean(isLoading));
+    if (sp) sp.style.display = active ? "inline-block" : "none";
+    if (pb) pb.classList.toggle("loading", active);
+  };
+
+  window.completeTopSpotInitialLoad = function (el, val) {
+    window.setTopSpotLoading(false, true);
+    if (el && typeof window.applyDeltaFlash === "function") {
+      window.applyDeltaFlash(el, val);
+    }
   };
 
   if (typeof window.fetch === "function" && !window.__spotFetchHooked) {
@@ -909,7 +920,7 @@
       try {
         return await _prevFetch(...args);
       } finally {
-        if (touchesFeed) setTimeout(() => window.setTopSpotLoading(false), 180);
+        if (touchesFeed) setTimeout(() => window.setTopSpotLoading(false, false), 180);
       }
     };
     window.__spotFetchHooked = true;
