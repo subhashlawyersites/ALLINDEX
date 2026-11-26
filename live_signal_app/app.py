@@ -10,7 +10,8 @@ from flask import Flask, Response, jsonify, render_template, request
 from analytics_data import build_historical_analytics
 from data_provider import fetch_latest_candles
 from fyers_auth import fyers_auth_bp, get_fyers_config, save_or_authorize_fyers, test_fyers_connection
-from signal_engine import COMMON_RULES, INDEX_CONFIGS, evaluate_index_signal
+from db_store import enqueue_alert_insert, enqueue_signal_upsert
+from signal_engine import COMMON_RULES, INDEX_CONFIGS, evaluate_index_signal, is_15m_bar_closed
 from strike_ladder import build_strike_ladder, build_target_ladder
 from trade_monitor import (
     close_monitored_trade,
@@ -19,7 +20,6 @@ from trade_monitor import (
     start_monitored_trade,
     get_recent_events,
     record_event,
-    start_monitored_trade,
 )
 
 IST = ZoneInfo("Asia/Kolkata")

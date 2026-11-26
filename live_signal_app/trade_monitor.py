@@ -1,3 +1,4 @@
+from db_store import enqueue_live_trade_upsert
 from datetime import datetime
 import json
 from pathlib import Path
@@ -109,6 +110,7 @@ def start_monitored_trade(
     }
     trades[key] = rec
     _save_json(ACTIVE_TRADES_PATH, trades)
+    enqueue_live_trade_upsert({**rec, "trade_status": "OPEN"})
     record_event(key, "TRADE_MONITOR_STARTED", f"Monitoring {d} entry={rec['entry_price']} SL={rec['sl_price']} Target={rec['target_price']}", "good")
     return rec
 
@@ -182,6 +184,7 @@ def close_monitored_trade(index_key: str, exit_price: float, exit_reason: str = 
     _save_json(ACTIVE_TRADES_PATH, trades)
     ex_t = exit_time or datetime.now(IST).strftime("%H:%M")
     closed_row = _append_closed_trade_to_csv(rec, float(exit_price), exit_reason, ex_t)
+    enqueue_live_trade_upsert({**closed_row, "exit_time": ex_t, "trade_status": "CLOSED"})
     sev = "good" if closed_row["points"] >= 0 else "bad"
     record_event(
         key,

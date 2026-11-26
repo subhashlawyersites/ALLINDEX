@@ -355,3 +355,12 @@ def evaluate_index_signal(
         strike_ladder=strike_ladder or {},
         monitored_trade=monitored_trade,
     )
+
+from datetime import timedelta
+
+def is_15m_bar_closed(bar_dt: datetime, now_ist: datetime, grace_sec: int = 2) -> bool:
+    "Return True only after the 15-minute bar window has finished."
+    bar_end = bar_dt.replace(second=0, microsecond=0) + timedelta(minutes=15)
+    now_naive = now_ist.replace(tzinfo=None) if getattr(now_ist, "tzinfo", None) else now_ist
+    bar_naive = bar_end.replace(tzinfo=None) if getattr(bar_end, "tzinfo", None) else bar_end
+    return now_naive >= (bar_naive + timedelta(seconds=grace_sec))
