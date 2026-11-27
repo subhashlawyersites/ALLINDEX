@@ -1,802 +1,802 @@
 [
   {
-    "id": "1795716807992_101",
-    "time": "2026-11-26 23:43:27 IST",
+    "id": "1795762140683_101",
+    "time": "2026-11-27 12:19:00 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
+    "severity": "good",
+    "message": "PUT reached 100% R target level (25729.4)"
+  },
+  {
+    "id": "1795762140742_101",
+    "time": "2026-11-27 12:19:00 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
+  },
+  {
+    "id": "1795762145160_101",
+    "time": "2026-11-27 12:19:05 IST",
+    "index": "NIFTY50",
+    "type": "CONFIRMED_PUT",
+    "severity": "good",
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
+  },
+  {
+    "id": "1795762145176_101",
+    "time": "2026-11-27 12:19:05 IST",
     "index": "NIFTY50",
     "type": "TRADE_MONITOR_STARTED",
     "severity": "good",
-    "message": "Monitoring CALL entry=25777.85 SL=25946.85 Target=25879.25"
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
   },
   {
-    "id": "1795716808130_101",
-    "time": "2026-11-26 23:43:28 IST",
-    "index": "SENSEX",
-    "type": "CONFIRMED_PUT",
-    "severity": "good",
-    "message": "SENSEX confirmed CONFIRMED_PUT @ 83855.54"
-  },
-  {
-    "id": "1795716808146_101",
-    "time": "2026-11-26 23:43:28 IST",
-    "index": "SENSEX",
-    "type": "TRADE_MONITOR_STARTED",
-    "severity": "good",
-    "message": "Monitoring CALL entry=83855.54 SL=84451.95 Target=84213.39"
-  },
-  {
-    "id": "1795716808241_101",
-    "time": "2026-11-26 23:43:28 IST",
-    "index": "BANKNIFTY",
-    "type": "CONFIRMED_CALL",
-    "severity": "good",
-    "message": "BANKNIFTY confirmed CONFIRMED_CALL @ 63945.75"
-  },
-  {
-    "id": "1795716808273_101",
-    "time": "2026-11-26 23:43:28 IST",
-    "index": "BANKNIFTY",
-    "type": "TRADE_MONITOR_STARTED",
-    "severity": "good",
-    "message": "Monitoring CALL entry=63945.75 SL=63741.45 Target=64068.33"
-  },
-  {
-    "id": "1795716808383_101",
-    "time": "2026-11-26 23:43:28 IST",
-    "index": "FINNIFTY",
-    "type": "AVOID_WEEKDAY",
-    "severity": "warn",
-    "message": "Thursday is avoidable for FINNIFTY"
-  },
-  {
-    "id": "1795716808402_101",
-    "time": "2026-11-26 23:43:28 IST",
+    "id": "1795762145510_101",
+    "time": "2026-11-27 12:19:05 IST",
     "index": "NIFTY50",
     "type": "MILESTONE_50PCT",
     "severity": "good",
-    "message": "CALL reached 50% R target level (25862.35)"
+    "message": "PUT reached 50% R target level (25765.2)"
   },
   {
-    "id": "1795716808412_101",
-    "time": "2026-11-26 23:43:28 IST",
+    "id": "1795762145531_101",
+    "time": "2026-11-27 12:19:05 IST",
     "index": "NIFTY50",
     "type": "MILESTONE_60PCT",
     "severity": "good",
-    "message": "CALL reached 60% R target level (25879.25)"
+    "message": "PUT reached 60% R target level (25758.04)"
   },
   {
-    "id": "1795716808428_101",
-    "time": "2026-11-26 23:43:28 IST",
+    "id": "1795762145542_101",
+    "time": "2026-11-27 12:19:05 IST",
     "index": "NIFTY50",
-    "type": "EXIT_SL_AMBIGUOUS",
-    "severity": "bad",
-    "message": "Same-bar SL & Target hit; conservative SL exit @ 25946.85"
-  },
-  {
-    "id": "1795716808430_101",
-    "time": "2026-11-26 23:43:28 IST",
-    "index": "SENSEX",
-    "type": "MILESTONE_50PCT",
+    "type": "MILESTONE_80PCT",
     "severity": "good",
-    "message": "CALL reached 50% R target level (84153.74)"
+    "message": "PUT reached 80% R target level (25743.72)"
   },
   {
-    "id": "1795716808446_101",
-    "time": "2026-11-26 23:43:28 IST",
-    "index": "SENSEX",
-    "type": "MILESTONE_60PCT",
+    "id": "1795762145558_101",
+    "time": "2026-11-27 12:19:05 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
     "severity": "good",
-    "message": "CALL reached 60% R target level (84213.39)"
+    "message": "PUT reached 100% R target level (25729.4)"
   },
   {
-    "id": "1795716808461_101",
-    "time": "2026-11-26 23:43:28 IST",
-    "index": "SENSEX",
-    "type": "EXIT_SL_AMBIGUOUS",
-    "severity": "bad",
-    "message": "Same-bar SL & Target hit; conservative SL exit @ 84451.95"
+    "id": "1795762145589_101",
+    "time": "2026-11-27 12:19:05 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
   },
   {
-    "id": "1795716808477_101",
-    "time": "2026-11-26 23:43:28 IST",
-    "index": "BANKNIFTY",
-    "type": "EXIT_SL",
-    "severity": "bad",
-    "message": "CALL Stop-Loss hit @ 63741.45"
-  },
-  {
-    "id": "1795716824083_101",
-    "time": "2026-11-26 23:43:44 IST",
+    "id": "1795762152255_101",
+    "time": "2026-11-27 12:19:12 IST",
     "index": "NIFTY50",
     "type": "CONFIRMED_PUT",
     "severity": "good",
-    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25777.85"
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
   },
   {
-    "id": "1795716824091_101",
-    "time": "2026-11-26 23:43:44 IST",
+    "id": "1795762152271_101",
+    "time": "2026-11-27 12:19:12 IST",
     "index": "NIFTY50",
     "type": "TRADE_MONITOR_STARTED",
     "severity": "good",
-    "message": "Monitoring CALL entry=25777.85 SL=25946.85 Target=25879.25"
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
   },
   {
-    "id": "1795716824199_101",
-    "time": "2026-11-26 23:43:44 IST",
-    "index": "SENSEX",
-    "type": "CONFIRMED_PUT",
-    "severity": "good",
-    "message": "SENSEX confirmed CONFIRMED_PUT @ 83855.54"
-  },
-  {
-    "id": "1795716824215_101",
-    "time": "2026-11-26 23:43:44 IST",
-    "index": "SENSEX",
-    "type": "TRADE_MONITOR_STARTED",
-    "severity": "good",
-    "message": "Monitoring CALL entry=83855.54 SL=84451.95 Target=84213.39"
-  },
-  {
-    "id": "1795716824342_101",
-    "time": "2026-11-26 23:43:44 IST",
-    "index": "BANKNIFTY",
-    "type": "CONFIRMED_CALL",
-    "severity": "good",
-    "message": "BANKNIFTY confirmed CONFIRMED_CALL @ 63945.75"
-  },
-  {
-    "id": "1795716824360_101",
-    "time": "2026-11-26 23:43:44 IST",
-    "index": "BANKNIFTY",
-    "type": "TRADE_MONITOR_STARTED",
-    "severity": "good",
-    "message": "Monitoring CALL entry=63945.75 SL=63741.45 Target=64068.33"
-  },
-  {
-    "id": "1795716824464_101",
-    "time": "2026-11-26 23:43:44 IST",
-    "index": "FINNIFTY",
-    "type": "AVOID_WEEKDAY",
-    "severity": "warn",
-    "message": "Thursday is avoidable for FINNIFTY"
-  },
-  {
-    "id": "1795716824479_101",
-    "time": "2026-11-26 23:43:44 IST",
+    "id": "1795762152606_101",
+    "time": "2026-11-27 12:19:12 IST",
     "index": "NIFTY50",
     "type": "MILESTONE_50PCT",
     "severity": "good",
-    "message": "CALL reached 50% R target level (25862.35)"
+    "message": "PUT reached 50% R target level (25765.2)"
   },
   {
-    "id": "1795716824488_101",
-    "time": "2026-11-26 23:43:44 IST",
+    "id": "1795762152622_101",
+    "time": "2026-11-27 12:19:12 IST",
     "index": "NIFTY50",
     "type": "MILESTONE_60PCT",
     "severity": "good",
-    "message": "CALL reached 60% R target level (25879.25)"
+    "message": "PUT reached 60% R target level (25758.04)"
   },
   {
-    "id": "1795716824505_101",
-    "time": "2026-11-26 23:43:44 IST",
+    "id": "1795762152648_101",
+    "time": "2026-11-27 12:19:12 IST",
     "index": "NIFTY50",
-    "type": "EXIT_SL_AMBIGUOUS",
-    "severity": "bad",
-    "message": "Same-bar SL & Target hit; conservative SL exit @ 25946.85"
-  },
-  {
-    "id": "1795716824515_101",
-    "time": "2026-11-26 23:43:44 IST",
-    "index": "SENSEX",
-    "type": "MILESTONE_50PCT",
+    "type": "MILESTONE_80PCT",
     "severity": "good",
-    "message": "CALL reached 50% R target level (84153.74)"
+    "message": "PUT reached 80% R target level (25743.72)"
   },
   {
-    "id": "1795716824523_101",
-    "time": "2026-11-26 23:43:44 IST",
-    "index": "SENSEX",
-    "type": "MILESTONE_60PCT",
+    "id": "1795762152663_101",
+    "time": "2026-11-27 12:19:12 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
     "severity": "good",
-    "message": "CALL reached 60% R target level (84213.39)"
+    "message": "PUT reached 100% R target level (25729.4)"
   },
   {
-    "id": "1795716824539_101",
-    "time": "2026-11-26 23:43:44 IST",
-    "index": "SENSEX",
-    "type": "EXIT_SL_AMBIGUOUS",
-    "severity": "bad",
-    "message": "Same-bar SL & Target hit; conservative SL exit @ 84451.95"
+    "id": "1795762152689_101",
+    "time": "2026-11-27 12:19:12 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
   },
   {
-    "id": "1795716824554_101",
-    "time": "2026-11-26 23:43:44 IST",
-    "index": "BANKNIFTY",
-    "type": "EXIT_SL",
-    "severity": "bad",
-    "message": "CALL Stop-Loss hit @ 63741.45"
-  },
-  {
-    "id": "1795716922905_101",
-    "time": "2026-11-26 23:45:22 IST",
+    "id": "1795762156322_101",
+    "time": "2026-11-27 12:19:16 IST",
     "index": "NIFTY50",
     "type": "CONFIRMED_PUT",
     "severity": "good",
-    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25777.85"
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
   },
   {
-    "id": "1795716922912_101",
-    "time": "2026-11-26 23:45:22 IST",
+    "id": "1795762156330_101",
+    "time": "2026-11-27 12:19:16 IST",
     "index": "NIFTY50",
     "type": "TRADE_MONITOR_STARTED",
     "severity": "good",
-    "message": "Monitoring CALL entry=25777.85 SL=25946.85 Target=25879.25"
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
   },
   {
-    "id": "1795716923628_101",
-    "time": "2026-11-26 23:45:23 IST",
-    "index": "NIFTY50",
-    "type": "CONFIRMED_PUT",
-    "severity": "good",
-    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25777.85"
-  },
-  {
-    "id": "1795716924816_101",
-    "time": "2026-11-26 23:45:24 IST",
-    "index": "SENSEX",
-    "type": "CONFIRMED_PUT",
-    "severity": "good",
-    "message": "SENSEX confirmed CONFIRMED_PUT @ 83855.54"
-  },
-  {
-    "id": "1795716924825_101",
-    "time": "2026-11-26 23:45:24 IST",
-    "index": "SENSEX",
-    "type": "TRADE_MONITOR_STARTED",
-    "severity": "good",
-    "message": "Monitoring CALL entry=83855.54 SL=84451.95 Target=84213.39"
-  },
-  {
-    "id": "1795716925591_101",
-    "time": "2026-11-26 23:45:25 IST",
-    "index": "SENSEX",
-    "type": "CONFIRMED_PUT",
-    "severity": "good",
-    "message": "SENSEX confirmed CONFIRMED_PUT @ 83855.54"
-  },
-  {
-    "id": "1795716926718_101",
-    "time": "2026-11-26 23:45:26 IST",
-    "index": "BANKNIFTY",
-    "type": "CONFIRMED_CALL",
-    "severity": "good",
-    "message": "BANKNIFTY confirmed CONFIRMED_CALL @ 63945.75"
-  },
-  {
-    "id": "1795716926737_101",
-    "time": "2026-11-26 23:45:26 IST",
-    "index": "BANKNIFTY",
-    "type": "TRADE_MONITOR_STARTED",
-    "severity": "good",
-    "message": "Monitoring CALL entry=63945.75 SL=63741.45 Target=64068.33"
-  },
-  {
-    "id": "1795716928744_101",
-    "time": "2026-11-26 23:45:28 IST",
-    "index": "BANKNIFTY",
-    "type": "CONFIRMED_CALL",
-    "severity": "good",
-    "message": "BANKNIFTY confirmed CONFIRMED_CALL @ 63945.75"
-  },
-  {
-    "id": "1795716929088_101",
-    "time": "2026-11-26 23:45:29 IST",
-    "index": "FINNIFTY",
-    "type": "AVOID_WEEKDAY",
-    "severity": "warn",
-    "message": "Thursday is avoidable for FINNIFTY"
-  },
-  {
-    "id": "1795716929094_101",
-    "time": "2026-11-26 23:45:29 IST",
+    "id": "1795762156784_101",
+    "time": "2026-11-27 12:19:16 IST",
     "index": "NIFTY50",
     "type": "MILESTONE_50PCT",
     "severity": "good",
-    "message": "CALL reached 50% R target level (25862.35)"
+    "message": "PUT reached 50% R target level (25765.2)"
   },
   {
-    "id": "1795716929109_101",
-    "time": "2026-11-26 23:45:29 IST",
+    "id": "1795762156789_101",
+    "time": "2026-11-27 12:19:16 IST",
     "index": "NIFTY50",
     "type": "MILESTONE_60PCT",
     "severity": "good",
-    "message": "CALL reached 60% R target level (25879.25)"
+    "message": "PUT reached 60% R target level (25758.04)"
   },
   {
-    "id": "1795716929135_101",
-    "time": "2026-11-26 23:45:29 IST",
+    "id": "1795762156806_101",
+    "time": "2026-11-27 12:19:16 IST",
     "index": "NIFTY50",
-    "type": "EXIT_SL_AMBIGUOUS",
-    "severity": "bad",
-    "message": "Same-bar SL & Target hit; conservative SL exit @ 25946.85"
-  },
-  {
-    "id": "1795716929136_101",
-    "time": "2026-11-26 23:45:29 IST",
-    "index": "SENSEX",
-    "type": "MILESTONE_50PCT",
+    "type": "MILESTONE_80PCT",
     "severity": "good",
-    "message": "CALL reached 50% R target level (84153.74)"
+    "message": "PUT reached 80% R target level (25743.72)"
   },
   {
-    "id": "1795716929154_101",
-    "time": "2026-11-26 23:45:29 IST",
-    "index": "SENSEX",
-    "type": "MILESTONE_60PCT",
+    "id": "1795762156822_101",
+    "time": "2026-11-27 12:19:16 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
     "severity": "good",
-    "message": "CALL reached 60% R target level (84213.39)"
+    "message": "PUT reached 100% R target level (25729.4)"
   },
   {
-    "id": "1795716929176_101",
-    "time": "2026-11-26 23:45:29 IST",
-    "index": "SENSEX",
-    "type": "EXIT_SL_AMBIGUOUS",
-    "severity": "bad",
-    "message": "Same-bar SL & Target hit; conservative SL exit @ 84451.95"
+    "id": "1795762156830_101",
+    "time": "2026-11-27 12:19:16 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
   },
   {
-    "id": "1795716929197_101",
-    "time": "2026-11-26 23:45:29 IST",
-    "index": "BANKNIFTY",
-    "type": "EXIT_SL",
-    "severity": "bad",
-    "message": "CALL Stop-Loss hit @ 63741.45"
-  },
-  {
-    "id": "1795716934925_101",
-    "time": "2026-11-26 23:45:34 IST",
+    "id": "1795762164245_101",
+    "time": "2026-11-27 12:19:24 IST",
     "index": "NIFTY50",
     "type": "CONFIRMED_PUT",
     "severity": "good",
-    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25777.85"
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
   },
   {
-    "id": "1795716934929_101",
-    "time": "2026-11-26 23:45:34 IST",
+    "id": "1795762164262_101",
+    "time": "2026-11-27 12:19:24 IST",
     "index": "NIFTY50",
     "type": "TRADE_MONITOR_STARTED",
     "severity": "good",
-    "message": "Monitoring CALL entry=25777.85 SL=25946.85 Target=25879.25"
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
   },
   {
-    "id": "1795716935033_101",
-    "time": "2026-11-26 23:45:35 IST",
-    "index": "SENSEX",
-    "type": "CONFIRMED_PUT",
-    "severity": "good",
-    "message": "SENSEX confirmed CONFIRMED_PUT @ 83855.54"
-  },
-  {
-    "id": "1795716935049_101",
-    "time": "2026-11-26 23:45:35 IST",
-    "index": "SENSEX",
-    "type": "TRADE_MONITOR_STARTED",
-    "severity": "good",
-    "message": "Monitoring CALL entry=83855.54 SL=84451.95 Target=84213.39"
-  },
-  {
-    "id": "1795716935161_101",
-    "time": "2026-11-26 23:45:35 IST",
-    "index": "BANKNIFTY",
-    "type": "CONFIRMED_CALL",
-    "severity": "good",
-    "message": "BANKNIFTY confirmed CONFIRMED_CALL @ 63945.75"
-  },
-  {
-    "id": "1795716935176_101",
-    "time": "2026-11-26 23:45:35 IST",
-    "index": "BANKNIFTY",
-    "type": "TRADE_MONITOR_STARTED",
-    "severity": "good",
-    "message": "Monitoring CALL entry=63945.75 SL=63741.45 Target=64068.33"
-  },
-  {
-    "id": "1795716935280_101",
-    "time": "2026-11-26 23:45:35 IST",
-    "index": "FINNIFTY",
-    "type": "AVOID_WEEKDAY",
-    "severity": "warn",
-    "message": "Thursday is avoidable for FINNIFTY"
-  },
-  {
-    "id": "1795716935296_101",
-    "time": "2026-11-26 23:45:35 IST",
+    "id": "1795762164584_101",
+    "time": "2026-11-27 12:19:24 IST",
     "index": "NIFTY50",
     "type": "MILESTONE_50PCT",
     "severity": "good",
-    "message": "CALL reached 50% R target level (25862.35)"
+    "message": "PUT reached 50% R target level (25765.2)"
   },
   {
-    "id": "1795716935296_101",
-    "time": "2026-11-26 23:45:35 IST",
+    "id": "1795762164600_101",
+    "time": "2026-11-27 12:19:24 IST",
     "index": "NIFTY50",
     "type": "MILESTONE_60PCT",
     "severity": "good",
-    "message": "CALL reached 60% R target level (25879.25)"
+    "message": "PUT reached 60% R target level (25758.04)"
   },
   {
-    "id": "1795716935312_101",
-    "time": "2026-11-26 23:45:35 IST",
+    "id": "1795762164600_101",
+    "time": "2026-11-27 12:19:24 IST",
     "index": "NIFTY50",
-    "type": "EXIT_SL_AMBIGUOUS",
-    "severity": "bad",
-    "message": "Same-bar SL & Target hit; conservative SL exit @ 25946.85"
-  },
-  {
-    "id": "1795716935328_101",
-    "time": "2026-11-26 23:45:35 IST",
-    "index": "SENSEX",
-    "type": "MILESTONE_50PCT",
+    "type": "MILESTONE_80PCT",
     "severity": "good",
-    "message": "CALL reached 50% R target level (84153.74)"
+    "message": "PUT reached 80% R target level (25743.72)"
   },
   {
-    "id": "1795716935328_101",
-    "time": "2026-11-26 23:45:35 IST",
-    "index": "SENSEX",
-    "type": "MILESTONE_60PCT",
+    "id": "1795762164616_101",
+    "time": "2026-11-27 12:19:24 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
     "severity": "good",
-    "message": "CALL reached 60% R target level (84213.39)"
+    "message": "PUT reached 100% R target level (25729.4)"
   },
   {
-    "id": "1795716935343_101",
-    "time": "2026-11-26 23:45:35 IST",
-    "index": "SENSEX",
-    "type": "EXIT_SL_AMBIGUOUS",
-    "severity": "bad",
-    "message": "Same-bar SL & Target hit; conservative SL exit @ 84451.95"
+    "id": "1795762164632_101",
+    "time": "2026-11-27 12:19:24 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
   },
   {
-    "id": "1795716935359_101",
-    "time": "2026-11-26 23:45:35 IST",
-    "index": "BANKNIFTY",
-    "type": "EXIT_SL",
-    "severity": "bad",
-    "message": "CALL Stop-Loss hit @ 63741.45"
-  },
-  {
-    "id": "1795716942225_101",
-    "time": "2026-11-26 23:45:42 IST",
+    "id": "1795762172283_101",
+    "time": "2026-11-27 12:19:32 IST",
     "index": "NIFTY50",
     "type": "CONFIRMED_PUT",
     "severity": "good",
-    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25777.85"
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
   },
   {
-    "id": "1795716942236_101",
-    "time": "2026-11-26 23:45:42 IST",
+    "id": "1795762172300_101",
+    "time": "2026-11-27 12:19:32 IST",
     "index": "NIFTY50",
     "type": "TRADE_MONITOR_STARTED",
     "severity": "good",
-    "message": "Monitoring CALL entry=25777.85 SL=25946.85 Target=25879.25"
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
   },
   {
-    "id": "1795716942330_101",
-    "time": "2026-11-26 23:45:42 IST",
-    "index": "SENSEX",
-    "type": "CONFIRMED_PUT",
-    "severity": "good",
-    "message": "SENSEX confirmed CONFIRMED_PUT @ 83855.54"
-  },
-  {
-    "id": "1795716942346_101",
-    "time": "2026-11-26 23:45:42 IST",
-    "index": "SENSEX",
-    "type": "TRADE_MONITOR_STARTED",
-    "severity": "good",
-    "message": "Monitoring CALL entry=83855.54 SL=84451.95 Target=84213.39"
-  },
-  {
-    "id": "1795716942449_101",
-    "time": "2026-11-26 23:45:42 IST",
-    "index": "BANKNIFTY",
-    "type": "CONFIRMED_CALL",
-    "severity": "good",
-    "message": "BANKNIFTY confirmed CONFIRMED_CALL @ 63945.75"
-  },
-  {
-    "id": "1795716942465_101",
-    "time": "2026-11-26 23:45:42 IST",
-    "index": "BANKNIFTY",
-    "type": "TRADE_MONITOR_STARTED",
-    "severity": "good",
-    "message": "Monitoring CALL entry=63945.75 SL=63741.45 Target=64068.33"
-  },
-  {
-    "id": "1795716942577_101",
-    "time": "2026-11-26 23:45:42 IST",
-    "index": "FINNIFTY",
-    "type": "AVOID_WEEKDAY",
-    "severity": "warn",
-    "message": "Thursday is avoidable for FINNIFTY"
-  },
-  {
-    "id": "1795716942593_101",
-    "time": "2026-11-26 23:45:42 IST",
+    "id": "1795762172679_101",
+    "time": "2026-11-27 12:19:32 IST",
     "index": "NIFTY50",
     "type": "MILESTONE_50PCT",
     "severity": "good",
-    "message": "CALL reached 50% R target level (25862.35)"
+    "message": "PUT reached 50% R target level (25765.2)"
   },
   {
-    "id": "1795716942593_101",
-    "time": "2026-11-26 23:45:42 IST",
+    "id": "1795762172695_101",
+    "time": "2026-11-27 12:19:32 IST",
     "index": "NIFTY50",
     "type": "MILESTONE_60PCT",
     "severity": "good",
-    "message": "CALL reached 60% R target level (25879.25)"
+    "message": "PUT reached 60% R target level (25758.04)"
   },
   {
-    "id": "1795716942609_101",
-    "time": "2026-11-26 23:45:42 IST",
+    "id": "1795762172712_101",
+    "time": "2026-11-27 12:19:32 IST",
     "index": "NIFTY50",
-    "type": "EXIT_SL_AMBIGUOUS",
-    "severity": "bad",
-    "message": "Same-bar SL & Target hit; conservative SL exit @ 25946.85"
-  },
-  {
-    "id": "1795716942626_101",
-    "time": "2026-11-26 23:45:42 IST",
-    "index": "SENSEX",
-    "type": "MILESTONE_50PCT",
+    "type": "MILESTONE_80PCT",
     "severity": "good",
-    "message": "CALL reached 50% R target level (84153.74)"
+    "message": "PUT reached 80% R target level (25743.72)"
   },
   {
-    "id": "1795716942635_101",
-    "time": "2026-11-26 23:45:42 IST",
-    "index": "SENSEX",
-    "type": "MILESTONE_60PCT",
+    "id": "1795762172712_101",
+    "time": "2026-11-27 12:19:32 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
     "severity": "good",
-    "message": "CALL reached 60% R target level (84213.39)"
+    "message": "PUT reached 100% R target level (25729.4)"
   },
   {
-    "id": "1795716942651_101",
-    "time": "2026-11-26 23:45:42 IST",
-    "index": "SENSEX",
-    "type": "EXIT_SL_AMBIGUOUS",
-    "severity": "bad",
-    "message": "Same-bar SL & Target hit; conservative SL exit @ 84451.95"
+    "id": "1795762172726_101",
+    "time": "2026-11-27 12:19:32 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
   },
   {
-    "id": "1795716942682_101",
-    "time": "2026-11-26 23:45:42 IST",
-    "index": "BANKNIFTY",
-    "type": "EXIT_SL",
-    "severity": "bad",
-    "message": "CALL Stop-Loss hit @ 63741.45"
-  },
-  {
-    "id": "1795716950384_101",
-    "time": "2026-11-26 23:45:50 IST",
+    "id": "1795762181239_101",
+    "time": "2026-11-27 12:19:41 IST",
     "index": "NIFTY50",
     "type": "CONFIRMED_PUT",
     "severity": "good",
-    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25777.85"
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
   },
   {
-    "id": "1795716950384_101",
-    "time": "2026-11-26 23:45:50 IST",
+    "id": "1795762181254_101",
+    "time": "2026-11-27 12:19:41 IST",
     "index": "NIFTY50",
     "type": "TRADE_MONITOR_STARTED",
     "severity": "good",
-    "message": "Monitoring CALL entry=25777.85 SL=25946.85 Target=25879.25"
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
   },
   {
-    "id": "1795716950483_101",
-    "time": "2026-11-26 23:45:50 IST",
-    "index": "SENSEX",
-    "type": "CONFIRMED_PUT",
-    "severity": "good",
-    "message": "SENSEX confirmed CONFIRMED_PUT @ 83855.54"
-  },
-  {
-    "id": "1795716950515_101",
-    "time": "2026-11-26 23:45:50 IST",
-    "index": "SENSEX",
-    "type": "TRADE_MONITOR_STARTED",
-    "severity": "good",
-    "message": "Monitoring CALL entry=83855.54 SL=84451.95 Target=84213.39"
-  },
-  {
-    "id": "1795716950663_101",
-    "time": "2026-11-26 23:45:50 IST",
-    "index": "BANKNIFTY",
-    "type": "CONFIRMED_CALL",
-    "severity": "good",
-    "message": "BANKNIFTY confirmed CONFIRMED_CALL @ 63945.75"
-  },
-  {
-    "id": "1795716950704_101",
-    "time": "2026-11-26 23:45:50 IST",
-    "index": "BANKNIFTY",
-    "type": "TRADE_MONITOR_STARTED",
-    "severity": "good",
-    "message": "Monitoring CALL entry=63945.75 SL=63741.45 Target=64068.33"
-  },
-  {
-    "id": "1795716950809_101",
-    "time": "2026-11-26 23:45:50 IST",
-    "index": "FINNIFTY",
-    "type": "AVOID_WEEKDAY",
-    "severity": "warn",
-    "message": "Thursday is avoidable for FINNIFTY"
-  },
-  {
-    "id": "1795716950825_101",
-    "time": "2026-11-26 23:45:50 IST",
+    "id": "1795762181598_101",
+    "time": "2026-11-27 12:19:41 IST",
     "index": "NIFTY50",
     "type": "MILESTONE_50PCT",
     "severity": "good",
-    "message": "CALL reached 50% R target level (25862.35)"
+    "message": "PUT reached 50% R target level (25765.2)"
   },
   {
-    "id": "1795716950836_101",
-    "time": "2026-11-26 23:45:50 IST",
+    "id": "1795762181605_101",
+    "time": "2026-11-27 12:19:41 IST",
     "index": "NIFTY50",
     "type": "MILESTONE_60PCT",
     "severity": "good",
-    "message": "CALL reached 60% R target level (25879.25)"
+    "message": "PUT reached 60% R target level (25758.04)"
   },
   {
-    "id": "1795716950851_101",
-    "time": "2026-11-26 23:45:50 IST",
+    "id": "1795762181622_101",
+    "time": "2026-11-27 12:19:41 IST",
     "index": "NIFTY50",
-    "type": "EXIT_SL_AMBIGUOUS",
-    "severity": "bad",
-    "message": "Same-bar SL & Target hit; conservative SL exit @ 25946.85"
-  },
-  {
-    "id": "1795716950852_101",
-    "time": "2026-11-26 23:45:50 IST",
-    "index": "SENSEX",
-    "type": "MILESTONE_50PCT",
+    "type": "MILESTONE_80PCT",
     "severity": "good",
-    "message": "CALL reached 50% R target level (84153.74)"
+    "message": "PUT reached 80% R target level (25743.72)"
   },
   {
-    "id": "1795716950868_101",
-    "time": "2026-11-26 23:45:50 IST",
-    "index": "SENSEX",
-    "type": "MILESTONE_60PCT",
+    "id": "1795762181635_101",
+    "time": "2026-11-27 12:19:41 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
     "severity": "good",
-    "message": "CALL reached 60% R target level (84213.39)"
+    "message": "PUT reached 100% R target level (25729.4)"
   },
   {
-    "id": "1795716950886_101",
-    "time": "2026-11-26 23:45:50 IST",
-    "index": "SENSEX",
-    "type": "EXIT_SL_AMBIGUOUS",
-    "severity": "bad",
-    "message": "Same-bar SL & Target hit; conservative SL exit @ 84451.95"
+    "id": "1795762181655_101",
+    "time": "2026-11-27 12:19:41 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
   },
   {
-    "id": "1795716950899_101",
-    "time": "2026-11-26 23:45:50 IST",
-    "index": "BANKNIFTY",
-    "type": "EXIT_SL",
-    "severity": "bad",
-    "message": "CALL Stop-Loss hit @ 63741.45"
-  },
-  {
-    "id": "1795716958893_101",
-    "time": "2026-11-26 23:45:58 IST",
+    "id": "1795762188316_101",
+    "time": "2026-11-27 12:19:48 IST",
     "index": "NIFTY50",
     "type": "CONFIRMED_PUT",
     "severity": "good",
-    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25777.85"
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
   },
   {
-    "id": "1795716958908_101",
-    "time": "2026-11-26 23:45:58 IST",
+    "id": "1795762188333_101",
+    "time": "2026-11-27 12:19:48 IST",
     "index": "NIFTY50",
     "type": "TRADE_MONITOR_STARTED",
     "severity": "good",
-    "message": "Monitoring CALL entry=25777.85 SL=25946.85 Target=25879.25"
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
   },
   {
-    "id": "1795716959019_101",
-    "time": "2026-11-26 23:45:59 IST",
-    "index": "SENSEX",
+    "id": "1795762188699_101",
+    "time": "2026-11-27 12:19:48 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_50PCT",
+    "severity": "good",
+    "message": "PUT reached 50% R target level (25765.2)"
+  },
+  {
+    "id": "1795762188707_101",
+    "time": "2026-11-27 12:19:48 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_60PCT",
+    "severity": "good",
+    "message": "PUT reached 60% R target level (25758.04)"
+  },
+  {
+    "id": "1795762188715_101",
+    "time": "2026-11-27 12:19:48 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_80PCT",
+    "severity": "good",
+    "message": "PUT reached 80% R target level (25743.72)"
+  },
+  {
+    "id": "1795762188732_101",
+    "time": "2026-11-27 12:19:48 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
+    "severity": "good",
+    "message": "PUT reached 100% R target level (25729.4)"
+  },
+  {
+    "id": "1795762188757_101",
+    "time": "2026-11-27 12:19:48 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
+  },
+  {
+    "id": "1795762196355_101",
+    "time": "2026-11-27 12:19:56 IST",
+    "index": "NIFTY50",
     "type": "CONFIRMED_PUT",
     "severity": "good",
-    "message": "SENSEX confirmed CONFIRMED_PUT @ 83855.54"
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
   },
   {
-    "id": "1795716959034_101",
-    "time": "2026-11-26 23:45:59 IST",
-    "index": "SENSEX",
+    "id": "1795762196386_101",
+    "time": "2026-11-27 12:19:56 IST",
+    "index": "NIFTY50",
     "type": "TRADE_MONITOR_STARTED",
     "severity": "good",
-    "message": "Monitoring CALL entry=83855.54 SL=84451.95 Target=84213.39"
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
   },
   {
-    "id": "1795716959150_101",
-    "time": "2026-11-26 23:45:59 IST",
-    "index": "BANKNIFTY",
-    "type": "CONFIRMED_CALL",
-    "severity": "good",
-    "message": "BANKNIFTY confirmed CONFIRMED_CALL @ 63945.75"
-  },
-  {
-    "id": "1795716959168_101",
-    "time": "2026-11-26 23:45:59 IST",
-    "index": "BANKNIFTY",
-    "type": "TRADE_MONITOR_STARTED",
-    "severity": "good",
-    "message": "Monitoring CALL entry=63945.75 SL=63741.45 Target=64068.33"
-  },
-  {
-    "id": "1795716959272_101",
-    "time": "2026-11-26 23:45:59 IST",
-    "index": "FINNIFTY",
-    "type": "AVOID_WEEKDAY",
-    "severity": "warn",
-    "message": "Thursday is avoidable for FINNIFTY"
-  },
-  {
-    "id": "1795716959286_101",
-    "time": "2026-11-26 23:45:59 IST",
+    "id": "1795762196975_101",
+    "time": "2026-11-27 12:19:56 IST",
     "index": "NIFTY50",
     "type": "MILESTONE_50PCT",
     "severity": "good",
-    "message": "CALL reached 50% R target level (25862.35)"
+    "message": "PUT reached 50% R target level (25765.2)"
   },
   {
-    "id": "1795716959296_101",
-    "time": "2026-11-26 23:45:59 IST",
+    "id": "1795762196992_101",
+    "time": "2026-11-27 12:19:56 IST",
     "index": "NIFTY50",
     "type": "MILESTONE_60PCT",
     "severity": "good",
-    "message": "CALL reached 60% R target level (25879.25)"
+    "message": "PUT reached 60% R target level (25758.04)"
   },
   {
-    "id": "1795716959313_101",
-    "time": "2026-11-26 23:45:59 IST",
+    "id": "1795762197024_101",
+    "time": "2026-11-27 12:19:57 IST",
     "index": "NIFTY50",
-    "type": "EXIT_SL_AMBIGUOUS",
-    "severity": "bad",
-    "message": "Same-bar SL & Target hit; conservative SL exit @ 25946.85"
+    "type": "MILESTONE_80PCT",
+    "severity": "good",
+    "message": "PUT reached 80% R target level (25743.72)"
   },
   {
-    "id": "1795716959322_101",
-    "time": "2026-11-26 23:45:59 IST",
-    "index": "SENSEX",
+    "id": "1795762197041_101",
+    "time": "2026-11-27 12:19:57 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
+    "severity": "good",
+    "message": "PUT reached 100% R target level (25729.4)"
+  },
+  {
+    "id": "1795762197083_101",
+    "time": "2026-11-27 12:19:57 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
+  },
+  {
+    "id": "1795762204368_101",
+    "time": "2026-11-27 12:20:04 IST",
+    "index": "NIFTY50",
+    "type": "CONFIRMED_PUT",
+    "severity": "good",
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
+  },
+  {
+    "id": "1795762204418_101",
+    "time": "2026-11-27 12:20:04 IST",
+    "index": "NIFTY50",
+    "type": "TRADE_MONITOR_STARTED",
+    "severity": "good",
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
+  },
+  {
+    "id": "1795762204855_101",
+    "time": "2026-11-27 12:20:04 IST",
+    "index": "NIFTY50",
     "type": "MILESTONE_50PCT",
     "severity": "good",
-    "message": "CALL reached 50% R target level (84153.74)"
+    "message": "PUT reached 50% R target level (25765.2)"
   },
   {
-    "id": "1795716959330_101",
-    "time": "2026-11-26 23:45:59 IST",
-    "index": "SENSEX",
+    "id": "1795762204861_101",
+    "time": "2026-11-27 12:20:04 IST",
+    "index": "NIFTY50",
     "type": "MILESTONE_60PCT",
     "severity": "good",
-    "message": "CALL reached 60% R target level (84213.39)"
+    "message": "PUT reached 60% R target level (25758.04)"
   },
   {
-    "id": "1795716959347_101",
-    "time": "2026-11-26 23:45:59 IST",
-    "index": "SENSEX",
-    "type": "EXIT_SL_AMBIGUOUS",
-    "severity": "bad",
-    "message": "Same-bar SL & Target hit; conservative SL exit @ 84451.95"
+    "id": "1795762204877_101",
+    "time": "2026-11-27 12:20:04 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_80PCT",
+    "severity": "good",
+    "message": "PUT reached 80% R target level (25743.72)"
   },
   {
-    "id": "1795716959363_101",
-    "time": "2026-11-26 23:45:59 IST",
-    "index": "BANKNIFTY",
-    "type": "EXIT_SL",
-    "severity": "bad",
-    "message": "CALL Stop-Loss hit @ 63741.45"
+    "id": "1795762204887_101",
+    "time": "2026-11-27 12:20:04 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
+    "severity": "good",
+    "message": "PUT reached 100% R target level (25729.4)"
+  },
+  {
+    "id": "1795762204902_101",
+    "time": "2026-11-27 12:20:04 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
+  },
+  {
+    "id": "1795762213134_101",
+    "time": "2026-11-27 12:20:13 IST",
+    "index": "NIFTY50",
+    "type": "CONFIRMED_PUT",
+    "severity": "good",
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
+  },
+  {
+    "id": "1795762213159_101",
+    "time": "2026-11-27 12:20:13 IST",
+    "index": "NIFTY50",
+    "type": "TRADE_MONITOR_STARTED",
+    "severity": "good",
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
+  },
+  {
+    "id": "1795762213735_101",
+    "time": "2026-11-27 12:20:13 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_50PCT",
+    "severity": "good",
+    "message": "PUT reached 50% R target level (25765.2)"
+  },
+  {
+    "id": "1795762213751_101",
+    "time": "2026-11-27 12:20:13 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_60PCT",
+    "severity": "good",
+    "message": "PUT reached 60% R target level (25758.04)"
+  },
+  {
+    "id": "1795762213768_101",
+    "time": "2026-11-27 12:20:13 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_80PCT",
+    "severity": "good",
+    "message": "PUT reached 80% R target level (25743.72)"
+  },
+  {
+    "id": "1795762213793_101",
+    "time": "2026-11-27 12:20:13 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
+    "severity": "good",
+    "message": "PUT reached 100% R target level (25729.4)"
+  },
+  {
+    "id": "1795762213874_101",
+    "time": "2026-11-27 12:20:13 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
+  },
+  {
+    "id": "1795762220393_101",
+    "time": "2026-11-27 12:20:20 IST",
+    "index": "NIFTY50",
+    "type": "CONFIRMED_PUT",
+    "severity": "good",
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
+  },
+  {
+    "id": "1795762220401_101",
+    "time": "2026-11-27 12:20:20 IST",
+    "index": "NIFTY50",
+    "type": "TRADE_MONITOR_STARTED",
+    "severity": "good",
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
+  },
+  {
+    "id": "1795762220890_101",
+    "time": "2026-11-27 12:20:20 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_50PCT",
+    "severity": "good",
+    "message": "PUT reached 50% R target level (25765.2)"
+  },
+  {
+    "id": "1795762220890_101",
+    "time": "2026-11-27 12:20:20 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_60PCT",
+    "severity": "good",
+    "message": "PUT reached 60% R target level (25758.04)"
+  },
+  {
+    "id": "1795762220906_101",
+    "time": "2026-11-27 12:20:20 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_80PCT",
+    "severity": "good",
+    "message": "PUT reached 80% R target level (25743.72)"
+  },
+  {
+    "id": "1795762220906_101",
+    "time": "2026-11-27 12:20:20 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
+    "severity": "good",
+    "message": "PUT reached 100% R target level (25729.4)"
+  },
+  {
+    "id": "1795762220958_101",
+    "time": "2026-11-27 12:20:20 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
+  },
+  {
+    "id": "1795762224417_101",
+    "time": "2026-11-27 12:20:24 IST",
+    "index": "NIFTY50",
+    "type": "CONFIRMED_PUT",
+    "severity": "good",
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
+  },
+  {
+    "id": "1795762224434_101",
+    "time": "2026-11-27 12:20:24 IST",
+    "index": "NIFTY50",
+    "type": "TRADE_MONITOR_STARTED",
+    "severity": "good",
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
+  },
+  {
+    "id": "1795762224851_101",
+    "time": "2026-11-27 12:20:24 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_50PCT",
+    "severity": "good",
+    "message": "PUT reached 50% R target level (25765.2)"
+  },
+  {
+    "id": "1795762224868_101",
+    "time": "2026-11-27 12:20:24 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_60PCT",
+    "severity": "good",
+    "message": "PUT reached 60% R target level (25758.04)"
+  },
+  {
+    "id": "1795762224901_101",
+    "time": "2026-11-27 12:20:24 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_80PCT",
+    "severity": "good",
+    "message": "PUT reached 80% R target level (25743.72)"
+  },
+  {
+    "id": "1795762224918_101",
+    "time": "2026-11-27 12:20:24 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
+    "severity": "good",
+    "message": "PUT reached 100% R target level (25729.4)"
+  },
+  {
+    "id": "1795762224943_101",
+    "time": "2026-11-27 12:20:24 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
+  },
+  {
+    "id": "1795762228404_101",
+    "time": "2026-11-27 12:20:28 IST",
+    "index": "NIFTY50",
+    "type": "CONFIRMED_PUT",
+    "severity": "good",
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
+  },
+  {
+    "id": "1795762228437_101",
+    "time": "2026-11-27 12:20:28 IST",
+    "index": "NIFTY50",
+    "type": "TRADE_MONITOR_STARTED",
+    "severity": "good",
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
+  },
+  {
+    "id": "1795762229358_101",
+    "time": "2026-11-27 12:20:29 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_50PCT",
+    "severity": "good",
+    "message": "PUT reached 50% R target level (25765.2)"
+  },
+  {
+    "id": "1795762229385_101",
+    "time": "2026-11-27 12:20:29 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_60PCT",
+    "severity": "good",
+    "message": "PUT reached 60% R target level (25758.04)"
+  },
+  {
+    "id": "1795762229410_101",
+    "time": "2026-11-27 12:20:29 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_80PCT",
+    "severity": "good",
+    "message": "PUT reached 80% R target level (25743.72)"
+  },
+  {
+    "id": "1795762229443_101",
+    "time": "2026-11-27 12:20:29 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
+    "severity": "good",
+    "message": "PUT reached 100% R target level (25729.4)"
+  },
+  {
+    "id": "1795762229484_101",
+    "time": "2026-11-27 12:20:29 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
+  },
+  {
+    "id": "1795762236489_101",
+    "time": "2026-11-27 12:20:36 IST",
+    "index": "NIFTY50",
+    "type": "CONFIRMED_PUT",
+    "severity": "good",
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
+  },
+  {
+    "id": "1795762236513_101",
+    "time": "2026-11-27 12:20:36 IST",
+    "index": "NIFTY50",
+    "type": "TRADE_MONITOR_STARTED",
+    "severity": "good",
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
+  },
+  {
+    "id": "1795762236976_101",
+    "time": "2026-11-27 12:20:36 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_50PCT",
+    "severity": "good",
+    "message": "PUT reached 50% R target level (25765.2)"
+  },
+  {
+    "id": "1795762237001_101",
+    "time": "2026-11-27 12:20:37 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_60PCT",
+    "severity": "good",
+    "message": "PUT reached 60% R target level (25758.04)"
+  },
+  {
+    "id": "1795762237018_101",
+    "time": "2026-11-27 12:20:37 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_80PCT",
+    "severity": "good",
+    "message": "PUT reached 80% R target level (25743.72)"
+  },
+  {
+    "id": "1795762237034_101",
+    "time": "2026-11-27 12:20:37 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
+    "severity": "good",
+    "message": "PUT reached 100% R target level (25729.4)"
+  },
+  {
+    "id": "1795762237084_101",
+    "time": "2026-11-27 12:20:37 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
   }
 ]
