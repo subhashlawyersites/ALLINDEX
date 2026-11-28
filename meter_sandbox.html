@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Isolated Meter & Needle Sandbox</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #0b1020;
+      color: #eef4ff;
+    }
+    .panel {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 20px;
+      border-radius: 14px;
+      background: #131c33;
+      border: 1px solid rgba(255,255,255,0.14);
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 14px 0 20px;
+    }
+    button {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: #1e2d52;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #293d70; }
+    .meter-box {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+    svg { width: 180px; height: 105px; overflow: visible; }
+    #needleGroup {
+      transform-box: fill-box;
+      transform-origin: 50% 100%;
+      will-change: transform;
+    }
+    .track {
+      height: 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.12);
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    #barFill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #06b6d4, #10b981);
+      will-change: width;
+    }
+    .stats {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.86rem;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h2>Isolated Needle &amp; Bar Sandbox</h2>
+    <div class="controls">
+      <button id="btnStatic">Hold Static Spot (No Move)</button>
+      <button id="btnMove">Step Spot to 25765.00</button>
+      <button id="btnTarget">Step Spot to Target (25758.04)</button>
+      <button id="btnReset">Reset to Entry (25801.00)</button>
+    </div>
+
+    <div class="meter-box">
+      <svg viewBox="0 0 180 100" aria-hidden="true">
+        <path d="M 18 90 A 72 72 0 0 1 162 90" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="12" stroke-linecap="round" />
+        <g id="needleGroup" style="transform: rotate(-90deg);">
+          <line x1="90" y1="90" x2="90" y2="24" stroke="#34d399" stroke-width="3.5" stroke-linecap="round" />
+          <circle cx="90" cy="90" r="6" fill="#ffffff" />
+        </g>
+      </svg>
+
+      <div class="stats" id="readout">
+        Spot: --<br/>
+        Target %: 0.0%<br/>
+        Angle: -90.0 deg<br/>
+        Needle Style: rotate(-90deg)
+      </div>
+    </div>
+
+    <div>Progress Bar (0?100%)</div>
+    <div class="track"><div id="barFill"></div></div>
+  </div>
+
+  <script>
+    (() => {
+      const cfg = { direction: "PUT", entry: 25801, target: 25758.04, spot: 25801 };
+      let currentDeg = -90;
+      let currentBar = 0;
+      let holdSpot = null;
+
+      function calcTargetPct() {
+        const activeSpot = holdSpot !== null ? holdSpot : cfg.spot;
+        const span = Math.abs(cfg.target - cfg.entry);
+        if (!span) return { pct: 0, activeSpot };
+        const raw = cfg.direction === "PUT"
+          ? ((cfg.entry - activeSpot) / span) * 100
+          : ((activeSpot - cfg.entry) / span) * 100;
+        return { pct: Math.max(0, Math.min(100, raw)), activeSpot };
+      }
+
+      function frame() {
+        const { pct, activeSpot } = calcTargetPct();
+        const targetDeg = -90 + (pct / 100) * 180;
+
+        if (Math.abs(targetDeg - currentDeg) < 0.05) {
+          currentDeg = targetDeg;
+        } else {
+          currentDeg += (targetDeg - currentDeg) * 0.15;
+        }
+
+        if (Math.abs(pct - currentBar) < 0.05) {
+          currentBar = pct;
+        } else {
+          currentBar += (pct - currentBar) * 0.15;
+        }
+
+        const needle = document.getElementById("needleGroup");
+        const bar = document.getElementById("barFill");
+        const readout = document.getElementById("readout");
+
+        const degStr = `rotate(${currentDeg.toFixed(2)}deg)`;
+        if (needle && needle.style.transform !== degStr) {
+          needle.style.transform = degStr;
+        }
+        const barStr = `${currentBar.toFixed(2)}%`;
+        if (bar && bar.style.width !== barStr) {
+          bar.style.width = barStr;
+        }
+        if (readout) {
+          const modeLabel = holdSpot !== null ? " (HELD)" : "";
+          readout.innerHTML =
+            `Spot: ${activeSpot.toFixed(2)}${modeLabel}<br/>` +
+            `Target %: ${pct.toFixed(1)}%<br/>` +
+            `Angle: ${currentDeg.toFixed(2)} deg<br/>` +
+            `Needle Style: ${degStr}`;
+        }
+        requestAnimationFrame(frame);
+      }
+
+      const btnStatic = document.getElementById("btnStatic");
+      btnStatic.onclick = () => {
+        if (holdSpot === null) {
+          holdSpot = cfg.spot;
+          btnStatic.textContent = `Unhold Spot (${holdSpot.toFixed(2)})`;
+        } else {
+          holdSpot = null;
+          btnStatic.textContent = "Hold Static Spot (No Move)";
+        }
+      };
+      document.getElementById("btnMove").onclick = () => { holdSpot = null; btnStatic.textContent = "Hold Static Spot (No Move)"; cfg.spot = 25765.00; };
+      document.getElementById("btnTarget").onclick = () => { holdSpot = null; btnStatic.textContent = "Hold Static Spot (No Move)"; cfg.spot = 25758.04; };
+      document.getElementById("btnReset").onclick = () => { holdSpot = null; btnStatic.textContent = "Hold Static Spot (No Move)"; cfg.spot = 25801.00; };
+
+      requestAnimationFrame(frame);
+    })();
+  </script>
+</body>
+</html>

@@ -66,6 +66,17 @@ def set_active_feed_index(index_key: str) -> str:
 _LAST_ENQUEUED_SIGNAL_SIG: dict[str, str] = {}
 
 
+
+def _extract_signal_time_from_state(st: dict) -> str:
+    import re
+    reason = str(st.get("status_reason") or "")
+    m = re.search(r"\bat\s+(\d{1,2}:\d{2})(?:\s*IST)?\b", reason, re.IGNORECASE)
+    if m:
+        hh, mm = m.group(1).split(":")
+        return f"{int(hh):02d}:{mm}"
+    return str(st.get("entry_time") or st.get("last_bar_time") or "").strip()
+
+
 def _maybe_enqueue_signal_and_alert(st: dict, event_type: str | None = None, message: str | None = None) -> None:
     idx_key = str(st.get("index_key") or "").strip()
     sess_date = str(st.get("session_date") or "").strip()
@@ -102,6 +113,7 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
     states = []
     sources = {}
     price_snaps = {}
+    intraday_candles = {}
 
     active_feed_key = get_active_feed_index()
     for key in INDEX_CONFIGS:
@@ -127,10 +139,10 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
             "high": max(float(last_row.get("high", spot_now)), spot_now),
             "low": min(float(last_row.get("low", spot_now)), spot_now),
             "close": spot_now,
-            "time_str": (
+            "time_str": st.get("last_bar_time") or (
                 live_q.get("updated_ist")
                 if isinstance(live_q, dict) and live_q.get("updated_ist")
-                else st["last_bar_time"]
+                else ""
             ),
         }
 
@@ -139,19 +151,35 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
         if st["avoid_today"]:
             _ev_type = "AVOID_WEEKDAY"
             _ev_msg = f"{st['weekday']} is avoidable for {key}"
-            record_event(key, _ev_type, _ev_msg, "warn")
+            record_event(key, _ev_type, _ev_msg, "warn", event_time=st.get("last_bar_time") or st.get("entry_time"), session_date=st.get("session_date"))
         elif st["gap_excluded"]:
             _ev_type = "GAP_EXCLUDED"
             _ev_msg = f"Session gap <= -0.75% on {key}"
-            record_event(key, _ev_type, _ev_msg, "bad")
+            record_event(key, _ev_type, _ev_msg, "bad", event_time=st.get("last_bar_time") or st.get("entry_time"), session_date=st.get("session_date"))
         elif st["status"].startswith("CONFIRMED_"):
             _ev_type = st["status"]
             _ev_msg = f"{key} confirmed {st['status']} @ {st['entry_price']}"
-            record_event(key, _ev_type, _ev_msg, "good")
+            st["entry_time"] = _extract_signal_time_from_state(st)
+            already_logged = any(
+                ev.get("index") == key
+                and ev.get("type") == _ev_type
+                and ev.get("message") == _ev_msg
+                and str(ev.get("time", "")).startswith(str(st.get("session_date") or ""))
+                for ev in get_recent_events(40)
+            )
+            if not already_logged:
+                record_event(key, _ev_type, _ev_msg, "good", event_time=st.get("entry_time") or st.get("last_bar_time"), session_date=st.get("session_date"))
             conf_dir = st.get("armed_dir") or ("PUT" if st["status"].endswith("PUT") else "CALL")
             entry_p = st.get("entry_price")
             sl_p = st.get("stop_price")
-            if entry_p is not None and sl_p is not None and key not in get_active_trades():
+            already_started = any(
+                ev.get("index") == key
+                and ev.get("type") == "TRADE_MONITOR_STARTED"
+                and f"entry={float(entry_p)}" in str(ev.get("message", ""))
+                and str(ev.get("time", "")).startswith(str(st.get("session_date") or ""))
+                for ev in get_recent_events(40)
+            )
+            if entry_p is not None and sl_p is not None and key not in get_active_trades() and not already_started:
                 start_monitored_trade(
                     index_key=key,
                     direction=conf_dir,
@@ -159,13 +187,15 @@ def _build_all_states() -> tuple[list[dict], dict[str, str], dict]:
                     sl_price=float(sl_p),
                     session_date=st.get("session_date"),
                     weekday=st.get("weekday"),
-                    entry_time=st.get("last_bar_time"),
+                    entry_time=st["entry_time"],
                 )
         _maybe_enqueue_signal_and_alert(st, _ev_type, _ev_msg)
+        if hasattr(df, "empty") and not df.empty:
+            intraday_candles[key] = df
         sources[key] = src
         states.append(st)
 
-    evaluate_monitored_trades_against_market(price_snaps)
+    evaluate_monitored_trades_against_market(price_snaps, intraday_candles=intraday_candles)
     active_map = get_active_trades()
 
     for st in states:
@@ -548,6 +578,18 @@ def api_watchlist():
             return jsonify({"error": f"Maximum {MAX_WATCHLIST_ITEMS} instruments allowed."}), 400
         selected = raw_ids if isinstance(raw_ids, list) else []
     return jsonify(fetch_watchlist_quotes(selected))
+
+
+
+@app.route("/api/lifecycle-events")
+def api_lifecycle_events():
+    from flask import jsonify, request
+    from session_lifecycle_tracker import get_session_lifecycle_events
+
+    sess_date = (request.args.get("session_date") or "").strip() or None
+    idx_key = (request.args.get("index") or "").strip() or None
+    events = get_session_lifecycle_events(session_date=sess_date, index_key=idx_key)
+    return jsonify({"events": events, "count": len(events)})
 
 
 if __name__ == "__main__":

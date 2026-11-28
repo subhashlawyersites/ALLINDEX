@@ -1,4 +1,4 @@
-from db_store import enqueue_live_trade_upsert
+from db_store import enqueue_alert_insert, enqueue_live_trade_upsert
 from datetime import datetime
 import json
 from pathlib import Path
@@ -37,7 +37,11 @@ def _save_json(path: Path, payload) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def record_event(index_key: str, event_type: str, message: str, severity: str = "warn") -> dict:
+def record_event(index_key: str, event_type: str, message: str, severity: str = "warn", event_time: str | None = None, session_date: str | None = None) -> dict:
+    now_dt = datetime.now(IST)
+    et_raw = str(event_time or "").strip()
+    et_date = et_raw[:10] if len(et_raw) >= 10 and et_raw[4] == "-" and et_raw[7] == "-" else ""
+    day_prefix = (session_date or et_date or now_dt.strftime("%Y-%m-%d")).strip()
     raw_events = _load_json(EVENTS_LOG_PATH, [])
     if isinstance(raw_events, dict) and isinstance(raw_events.get("events"), list):
         events = list(raw_events["events"])
@@ -45,19 +49,49 @@ def record_event(index_key: str, event_type: str, message: str, severity: str = 
         events = list(raw_events)
     else:
         events = []
-    now_ist = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST")
+    # Keep only events from the active session_date so a new session starts fresh and persists
+    events = [ev for ev in events if str(ev.get("time", "")).startswith(day_prefix)]
+    et = str(event_time or "").strip()
+    if et:
+        if "IST" in et:
+            now_ist = et
+        elif len(et) >= 10 and et[4] == "-":
+            now_ist = f"{et} IST"
+        else:
+            now_ist = f"{day_prefix} {et} IST"
+    else:
+        now_ist = now_dt.strftime("%Y-%m-%d %H:%M:%S IST")
+    idx_up = index_key.upper()
     ev = {
-        "id": f"{int(datetime.now(IST).timestamp() * 1000)}_{len(events) + 1}",
+        "id": f"{int(now_dt.timestamp() * 1000)}_{len(events) + 1}",
         "time": now_ist,
-        "index": index_key.upper(),
+        "index": idx_up,
         "type": event_type,
         "severity": severity,
         "message": message,
     }
-    if not events or events[-1].get("type") != event_type or events[-1].get("message") != message or events[-1].get("index") != index_key.upper():
+    duplicate_today = any(
+        e.get("index") == idx_up
+        and e.get("type") == event_type
+        and e.get("message") == message
+        and str(e.get("time", "")).startswith(day_prefix)
+        for e in events[-60:]
+    )
+    if not duplicate_today:
         events.append(ev)
         events = events[-100:]
         _save_json(EVENTS_LOG_PATH, events)
+        try:
+            enqueue_alert_insert(
+                index_name=idx_up,
+                session_date=day_prefix,
+                alert_time=now_ist,
+                alert_type=event_type,
+                message=message,
+                metadata={"severity": severity},
+            )
+        except Exception:
+            pass
     return ev
 
 
@@ -111,7 +145,20 @@ def start_monitored_trade(
     trades[key] = rec
     _save_json(ACTIVE_TRADES_PATH, trades)
     enqueue_live_trade_upsert({**rec, "trade_status": "OPEN"})
-    record_event(key, "TRADE_MONITOR_STARTED", f"Monitoring {d} entry={rec['entry_price']} SL={rec['sl_price']} Target={rec['target_price']}", "good")
+    record_event(key, "TRADE_MONITOR_STARTED", f"Monitoring {d} entry={rec['entry_price']} SL={rec['sl_price']} Target={rec['target_price']}", "good", event_time=rec.get("entry_time"), session_date=rec.get("session_date"))
+    _entry_sess = str(rec.get("session_date") or "")
+    _entry_tid = _ensure_trade_id(rec, key, _entry_sess)
+    _log_lc(
+        index_key=key,
+        event_type="ENTRY_CANDLE",
+        bar_time=rec.get("entry_time"),
+        sess_d=_entry_sess,
+        message=f"Entry candle {d} @ {rec['entry_price']} (SL={rec['sl_price']}, Target={rec['target_price']})",
+        trade_id=_entry_tid,
+        direction=d,
+        level_pct=0,
+        price=rec.get("entry_price"),
+    )
     return rec
 
 
@@ -190,10 +237,105 @@ def close_monitored_trade(index_key: str, exit_price: float, exit_reason: str = 
         f"Closed {rec['direction']} @ {closed_row['exit_price']} ({closed_row['points']:+.2f} pts / {closed_row['r_val']:+.2f}R)",
         sev,
     )
+    _log_lc(
+        index_key=key,
+        event_type=exit_reason,
+        bar_time=ex_t,
+        sess_d=str(rec.get("session_date") or ""),
+        message=f"Closed {rec['direction']} @ {closed_row['exit_price']} ({closed_row['points']:+.2f} pts / {closed_row['r_val']:+.2f}R)",
+        trade_id=str(rec.get("trade_id") or "") or None,
+        direction=str(rec.get("direction") or ""),
+        price=closed_row["exit_price"],
+    )
     return closed_row
 
 
-def evaluate_monitored_trades_against_market(latest_prices: dict[str, dict]) -> list[dict]:
+
+
+def _bar_hhmm(row) -> str:
+    ts = str(row.get("timestamp_ist") or row.get("datetime") or row.get("time") or "").strip()
+    for sep in (" ", "T"):
+        if sep in ts:
+            tail = ts.split(sep, 1)[1].strip()
+            if len(tail) >= 4 and tail[1] == ":":
+                tail = "0" + tail
+            if len(tail) >= 5 and tail[2] == ":":
+                return tail[:5]
+    if len(ts) >= 5 and ts[2] == ":":
+        return ts[:5]
+    return ""
+
+
+def _slice_bars_from_entry(df: Optional[pd.DataFrame], session_date: str, entry_time: str) -> list[dict]:
+    if df is None or getattr(df, "empty", True):
+        return []
+    bars = []
+    entry_hhmm = (entry_time or "00:00").strip()[:5]
+    for _, row in df.iterrows():
+        ts_str = str(row.get("timestamp_ist") or "")
+        if session_date and ts_str and not ts_str.startswith(session_date):
+            continue
+        hhmm = _bar_hhmm(row)
+        if hhmm and entry_hhmm and hhmm < entry_hhmm:
+            continue
+        bars.append({
+            "hhmm": hhmm or entry_hhmm,
+            "high": float(row.get("high", row.get("close", 0.0))),
+            "low": float(row.get("low", row.get("close", 0.0))),
+            "close": float(row.get("close", 0.0)),
+        })
+    return bars
+
+
+
+def _lifecycle_dir(direction: str) -> str:
+    d = str(direction or "").upper()
+    if d in ("CALL", "LONG"):
+        return "LONG"
+    if d in ("PUT", "SHORT"):
+        return "SHORT"
+    return d or None
+
+
+def _ensure_trade_id(rec: dict, index_key: str, sess_d: str) -> str:
+    tid = str(rec.get("trade_id") or "").strip()
+    if not tid:
+        from session_lifecycle_tracker import next_trade_id
+        tid = next_trade_id(index_key, sess_d or "UNKNOWN")
+        rec["trade_id"] = tid
+    return tid
+
+
+def _log_lc(
+    *,
+    index_key: str,
+    event_type: str,
+    bar_time: str | None,
+    sess_d: str | None,
+    message: str,
+    trade_id: str | None = None,
+    direction: str | None = None,
+    level_pct: float | int | None = None,
+    price: float | int | None = None,
+) -> None:
+    try:
+        from session_lifecycle_tracker import append_lifecycle_event
+        append_lifecycle_event(
+            index_key=index_key,
+            event_type=event_type,
+            event_ts_ist=bar_time,
+            message=message,
+            session_date=sess_d or None,
+            trade_id=trade_id,
+            direction=_lifecycle_dir(direction or ""),
+            level_pct=level_pct,
+            price=price,
+        )
+    except Exception:
+        pass
+
+
+def evaluate_monitored_trades_against_market(latest_prices: dict[str, dict], intraday_candles: Optional[dict[str, pd.DataFrame]] = None) -> list[dict]:
     """
     Checks active monitored trades against latest candle/spot data and auto-closes on
     SL, 0.60R Target, or 15:15 EOD exit while recording milestone alerts.
@@ -209,93 +351,125 @@ def evaluate_monitored_trades_against_market(latest_prices: dict[str, dict]) -> 
         snap = latest_prices.get(key)
         if not snap:
             continue
-        high_v = float(snap.get("high", snap.get("close", 0.0)))
-        low_v = float(snap.get("low", snap.get("close", 0.0)))
-        close_v = float(snap.get("close", 0.0))
-        bar_t = str(snap.get("time_str", datetime.now(IST).strftime("%H:%M")))
 
         d = rec["direction"].upper()
         sl_v = float(rec["sl_price"])
         tgt_v = float(rec["target_price"])
         entry_v = float(rec["entry_price"])
         risk = max(0.01, float(rec.get("risk_pts") or abs(entry_v - sl_v) or 1.0))
+        sess_d = str(rec.get("session_date") or "")
+        ent_t = str(rec.get("entry_time") or "")
 
-        if entry_v > 0:
-            if d == "CALL":
-                fav_move = ((high_v - entry_v) / entry_v) * 100.0
-                adv_move = ((low_v - entry_v) / entry_v) * 100.0
-            else:
-                fav_move = ((entry_v - low_v) / entry_v) * 100.0
-                adv_move = ((entry_v - high_v) / entry_v) * 100.0
-            prev_fav = float(rec.get("max_favorable_pct", 0.0) or 0.0)
-            prev_adv = float(rec.get("max_adverse_pct", 0.0) or 0.0)
-            next_fav = round(max(prev_fav, fav_move), 2)
-            next_adv = round(min(prev_adv, adv_move), 2)
-            if next_fav != prev_fav or next_adv != prev_adv:
-                rec["max_favorable_pct"] = next_fav
-                rec["max_adverse_pct"] = next_adv
-                changed = True
+        bars_to_eval = _slice_bars_from_entry((intraday_candles or {}).get(key), sess_d, ent_t)
+        if not bars_to_eval:
+            bars_to_eval = [{
+                "hhmm": str(snap.get("time_str", datetime.now(IST).strftime("%H:%M")))[:5],
+                "high": float(snap.get("high", snap.get("close", 0.0))),
+                "low": float(snap.get("low", snap.get("close", 0.0))),
+                "close": float(snap.get("close", 0.0)),
+            }]
 
-        # Check milestones (50%, 60%, 80%, 100%)
         hit_set = set(rec.get("milestones_hit", []))
-        for pct in [50, 60, 80, 100]:
-            lvl = (entry_v + (pct / 100.0) * risk) if d == "CALL" else (entry_v - (pct / 100.0) * risk)
-            reached = (high_v >= lvl) if d == "CALL" else (low_v <= lvl)
-            if reached and pct not in hit_set:
-                hit_set.add(pct)
+        closed_this_trade = False
+
+        for b in bars_to_eval:
+            high_v = b["high"]
+            low_v = b["low"]
+            close_v = b["close"]
+            bar_t = b["hhmm"] or str(snap.get("time_str", datetime.now(IST).strftime("%H:%M")))[:5]
+
+            if entry_v > 0:
+                if d == "CALL":
+                    fav_move = ((high_v - entry_v) / entry_v) * 100.0
+                    adv_move = ((low_v - entry_v) / entry_v) * 100.0
+                else:
+                    fav_move = ((entry_v - low_v) / entry_v) * 100.0
+                    adv_move = ((entry_v - high_v) / entry_v) * 100.0
+                prev_fav = float(rec.get("max_favorable_pct", 0.0) or 0.0)
+                prev_adv = float(rec.get("max_adverse_pct", 0.0) or 0.0)
+                next_fav = round(max(prev_fav, fav_move), 2)
+                next_adv = round(min(prev_adv, adv_move), 2)
+                if next_fav != prev_fav or next_adv != prev_adv:
+                    rec["max_favorable_pct"] = next_fav
+                    rec["max_adverse_pct"] = next_adv
+                    changed = True
+
+            post_hit_set = set(rec.get("post_exit_milestones_hit", []))
+            for pct in [50, 60, 70, 80, 90, 100]:
+                lvl = (entry_v + (pct / 100.0) * risk) if d == "CALL" else (entry_v - (pct / 100.0) * risk)
+                reached = (high_v >= lvl) if d == "CALL" else (low_v <= lvl)
+                if reached:
+                    if not closed_this_trade and pct not in hit_set:
+                        hit_set.add(pct)
+                        changed = True
+                        record_event(key, f"MILESTONE_{pct}PCT", f"{d} reached {pct}% R target level ({round(lvl, 2)})", "good", event_time=bar_t, session_date=sess_d)
+                        _log_lc(index_key=key, event_type=f"MILESTONE_{pct}PCT", bar_time=bar_t, sess_d=sess_d, message=f"{d} reached {pct}% R target level ({round(lvl, 2)})", trade_id=_ensure_trade_id(rec, key, sess_d), direction=d, level_pct=pct, price=round(lvl, 2))
+                    elif closed_this_trade and pct > 60 and pct not in post_hit_set:
+                        post_hit_set.add(pct)
+                        rec["post_exit_milestones_hit"] = sorted(post_hit_set)
+                        record_event(key, f"MILESTONE_{pct}PCT", f"{d} (post-0.60R exit) reached {pct}% R level ({round(lvl, 2)})", "good", event_time=bar_t, session_date=sess_d)
+                        _log_lc(index_key=key, event_type=f"MILESTONE_{pct}PCT", bar_time=bar_t, sess_d=sess_d, message=f"{d} (post-0.60R exit) reached {pct}% R level ({round(lvl, 2)})", trade_id=_ensure_trade_id(rec, key, sess_d), direction=d, level_pct=pct, price=round(lvl, 2))
+
+            if d == "CALL":
+                sl_hit = low_v <= sl_v
+                tgt_hit = high_v >= tgt_v
+            else:
+                sl_hit = high_v >= sl_v
+                tgt_hit = low_v <= tgt_v
+
+            if sl_hit and tgt_hit:
+                trades.pop(key, None)
                 changed = True
-                record_event(key, f"MILESTONE_{pct}PCT", f"{d} reached {pct}% R target level ({round(lvl, 2)})", "good")
+                closed_row = _append_closed_trade_to_csv(rec, sl_v, "EXIT_SL_AMBIGUOUS", bar_t)
+                enqueue_live_trade_upsert({**closed_row, "exit_time": bar_t, "trade_status": "CLOSED"})
+                newly_closed.append(closed_row)
+                record_event(key, "EXIT_SL_AMBIGUOUS", f"Same-bar SL & Target hit; conservative SL exit @ {sl_v}", "bad", event_time=bar_t, session_date=sess_d)
+                _log_lc(index_key=key, event_type="EXIT_SL_AMBIGUOUS", bar_time=bar_t, sess_d=sess_d, message=f"Same-bar SL & Target hit; conservative SL exit @ {sl_v}", trade_id=_ensure_trade_id(rec, key, sess_d), direction=d, price=sl_v)
+                closed_this_trade = True
+                break
+            if sl_hit:
+                trades.pop(key, None)
+                changed = True
+                closed_row = _append_closed_trade_to_csv(rec, sl_v, "EXIT_SL", bar_t)
+                enqueue_live_trade_upsert({**closed_row, "exit_time": bar_t, "trade_status": "CLOSED"})
+                newly_closed.append(closed_row)
+                record_event(key, "EXIT_SL", f"{d} Stop-Loss hit @ {sl_v}", "bad", event_time=bar_t, session_date=sess_d)
+                _log_lc(index_key=key, event_type="EXIT_SL", bar_time=bar_t, sess_d=sess_d, message=f"{d} Stop-Loss hit @ {sl_v}", trade_id=_ensure_trade_id(rec, key, sess_d), direction=d, price=sl_v)
+                closed_this_trade = True
+                break
+            if tgt_hit and not closed_this_trade:
+                trades.pop(key, None)
+                changed = True
+                closed_row = _append_closed_trade_to_csv(rec, tgt_v, "EXIT_TARGET", bar_t)
+                enqueue_live_trade_upsert({**closed_row, "exit_time": bar_t, "trade_status": "CLOSED"})
+                newly_closed.append(closed_row)
+                record_event(key, "EXIT_TARGET", f"{d} 0.60R Target hit @ {tgt_v}", "good", event_time=bar_t, session_date=sess_d)
+                _log_lc(index_key=key, event_type="EXIT_TARGET", bar_time=bar_t, sess_d=sess_d, message=f"{d} 0.60R Target hit @ {tgt_v}", trade_id=_ensure_trade_id(rec, key, sess_d), direction=d, level_pct=60, price=tgt_v)
+                closed_this_trade = True
+                continue
+            if closed_this_trade:
+                sl_after_exit = (low_v <= sl_v) if d == "CALL" else (high_v >= sl_v)
+                if sl_after_exit and not rec.get("post_exit_sl_logged"):
+                    rec["post_exit_sl_logged"] = True
+                    record_event(key, "POST_EXIT_SL_TOUCHED", f"{d} (post-0.60R exit) price touched SL level @ {sl_v}", "warn", event_time=bar_t, session_date=sess_d)
+                    _log_lc(index_key=key, event_type="POST_EXIT_SL_TOUCHED", bar_time=bar_t, sess_d=sess_d, message=f"{d} (post-0.60R exit) price touched SL level @ {sl_v}", trade_id=_ensure_trade_id(rec, key, sess_d), direction=d, price=sl_v)
+                if bar_t >= "15:15":
+                    break
+                continue
+            if bar_t >= "15:15":
+                trades.pop(key, None)
+                changed = True
+                closed_row = _append_closed_trade_to_csv(rec, close_v, "EXIT_EOD_1515", "15:15")
+                enqueue_live_trade_upsert({**closed_row, "exit_time": "15:15", "trade_status": "CLOSED"})
+                newly_closed.append(closed_row)
+                record_event(key, "EXIT_EOD_1515", f"EOD 15:15 square-off @ {close_v}", "warn", event_time="15:15", session_date=sess_d)
+                _log_lc(index_key=key, event_type="EXIT_EOD_1515", bar_time="15:15", sess_d=sess_d, message=f"EOD 15:15 square-off @ {close_v}", trade_id=_ensure_trade_id(rec, key, sess_d), direction=d, price=close_v)
+                closed_this_trade = True
+                break
+
         rec["milestones_hit"] = sorted(hit_set)
-
-        # Exit evaluation: SL first (conservative), then 0.60R target, then EOD 15:15
-        if d == "CALL":
-            sl_hit = low_v <= sl_v
-            tgt_hit = high_v >= tgt_v
-            if sl_hit and tgt_hit:
-                trades.pop(key, None)
-                changed = True
-                newly_closed.append(_append_closed_trade_to_csv(rec, sl_v, "EXIT_SL_AMBIGUOUS", bar_t))
-                record_event(key, "EXIT_SL_AMBIGUOUS", f"Same-bar SL & Target hit; conservative SL exit @ {sl_v}", "bad")
-                continue
-            if sl_hit:
-                trades.pop(key, None)
-                changed = True
-                newly_closed.append(_append_closed_trade_to_csv(rec, sl_v, "EXIT_SL", bar_t))
-                record_event(key, "EXIT_SL", f"CALL Stop-Loss hit @ {sl_v}", "bad")
-                continue
-            if tgt_hit:
-                trades.pop(key, None)
-                changed = True
-                newly_closed.append(_append_closed_trade_to_csv(rec, tgt_v, "EXIT_TARGET", bar_t))
-                record_event(key, "EXIT_TARGET", f"CALL 0.60R Target hit @ {tgt_v}", "good")
-                continue
-        else:
-            sl_hit = high_v >= sl_v
-            tgt_hit = low_v <= tgt_v
-            if sl_hit and tgt_hit:
-                trades.pop(key, None)
-                changed = True
-                newly_closed.append(_append_closed_trade_to_csv(rec, sl_v, "EXIT_SL_AMBIGUOUS", bar_t))
-                record_event(key, "EXIT_SL_AMBIGUOUS", f"Same-bar SL & Target hit; conservative SL exit @ {sl_v}", "bad")
-                continue
-            if sl_hit:
-                trades.pop(key, None)
-                changed = True
-                newly_closed.append(_append_closed_trade_to_csv(rec, sl_v, "EXIT_SL", bar_t))
-                record_event(key, "EXIT_SL", f"PUT Stop-Loss hit @ {sl_v}", "bad")
-                continue
-            if tgt_hit:
-                trades.pop(key, None)
-                changed = True
-                newly_closed.append(_append_closed_trade_to_csv(rec, tgt_v, "EXIT_TARGET", bar_t))
-                record_event(key, "EXIT_TARGET", f"PUT 0.60R Target hit @ {tgt_v}", "good")
-                continue
-
-        if bar_t >= "15:15":
-            trades.pop(key, None)
-            changed = True
-            newly_closed.append(_append_closed_trade_to_csv(rec, close_v, "EXIT_EOD_1515", "15:15"))
-            record_event(key, "EXIT_EOD_1515", f"EOD 15:15 square-off @ {close_v}", "warn")
+        if not closed_this_trade and changed:
+            enqueue_live_trade_upsert({**rec, "trade_status": "OPEN"})
 
     if changed:
         _save_json(ACTIVE_TRADES_PATH, trades)

@@ -181,7 +181,7 @@ def upsert_live_trade(trade: dict[str, Any]) -> None:
     sess_date = str(trade["session_date"]).strip()
     entry_time = str(trade["entry_time"]).strip()
     direction = str(trade["direction"]).strip()
-    uid = str(trade.get("trade_uid") or f"{idx_name}_{sess_date}_{entry_time}_{direction}")
+    uid = str(trade.get("trade_uid") or f"{idx_name}_{sess_date}_{direction}")
 
     conn = get_db_connection()
     try:

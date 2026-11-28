@@ -41,16 +41,28 @@
       </div>
       <p class="muted" style="margin:6px 0 8px;">{{ s.session_date }} ({{ s.weekday }}) | Bar {{ s.last_bar_time }} | {{ sources[s.index_key] }}</p>
       <div class="row-kv">
-        <span>Spot / SMA2 / SMA10:</span>
-        <strong data-spot-sma="{{ s.index_key }}">{{ s.spot_price or s.last_close }} / {{ s.sma2 }} / {{ s.sma10 }}</strong>
+        <span>Spot:</span>
+        <strong data-spot-sma="{{ s.index_key }}">{{ s.spot_price or s.last_close }}</strong>
       </div>
       <div class="row-kv">
         <span>ATM Strike:</span>
         <strong data-atm="{{ s.index_key }}">{{ s.strike_ladder.atm or '-' }} ({{ s.strike_ladder.direction }})</strong>
       </div>
       <div class="row-kv">
-        <span>Avoid Days:</span>
-        <span>{{ s.avoid_weekdays|join(', ') if s.avoid_weekdays else 'None (caution: ' + (s.caution_weekdays|join(', ') or 'Friday') + ')' }}</span>
+        <span>Entry Time:</span>
+        <strong data-entry-time="{{ s.index_key }}">{{ s.entry_time or s.last_bar_time or '-' }}</strong>
+      </div>
+      <div class="row-kv">
+        <span>ENTRY:</span>
+        <strong data-entry-price="{{ s.index_key }}">{{ s.entry_price or '-' }}</strong>
+      </div>
+      <div class="row-kv">
+        <span>SL:</span>
+        <strong class="neg" data-sl-price="{{ s.index_key }}">{{ s.stop_price or '-' }}</strong>
+      </div>
+      <div class="row-kv">
+        <span>TARGET (60% - 100%):</span>
+        <strong class="pos" data-target-range="{{ s.index_key }}">{{ s.target_price or '-' }}{% if s.target_ladder and s.target_ladder.levels and s.target_ladder.levels[-1].price != s.target_price %} - {{ s.target_ladder.levels[-1].price }}{% endif %}</strong>
       </div>
       {% if s.target_ladder.active %}
       <div class="progress-wrap">

@@ -85,47 +85,67 @@ def _load_supabase_trades_df() -> pd.DataFrame:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    select index_name, session_date, weekday, bar_time, direction,
-                           entry_price, sl_price, target_price, last_close, status, payload
-                    from public.signals
-                    order by session_date desc, bar_time desc
+                    select
+                        coalesce(index_name, 'NIFTY50') as index_name,
+                        coalesce(session_date::text, '') as session_date,
+                        coalesce(weekday, '') as weekday,
+                        coalesce(entry_time, '') as entry_time,
+                        coalesce(exit_time, '') as exit_time,
+                        coalesce(direction, '') as direction,
+                        coalesce(entry_price, 0.0)::float as entry_price,
+                        coalesce(sl_price, 0.0)::float as sl_price,
+                        coalesce(target_price, 0.0)::float as target_price,
+                        exit_price::float as exit_price,
+                        coalesce(exit_reason, '') as exit_reason,
+                        points::float as points,
+                        coalesce(r_val, 0.0)::float as r_val,
+                        coalesce(trade_status, '') as trade_status
+                    from public.live_trades
+                    where upper(coalesce(trade_status, '')) = 'CLOSED'
+                    order by session_date desc, entry_time desc, id desc
                     limit 2000
                     """
                 )
-                rows = cur.fetchall()
+                raw_rows = cur.fetchall()
         finally:
             conn.close()
     except Exception:
         return pd.DataFrame(columns=cols)
 
     records = []
-    for r in rows or []:
-        idx_name, sess_date, wkday, bar_time, direction, entry_p, sl_p, tgt_p, last_c, status, payload = r
-        p_dict = payload if isinstance(payload, dict) else {}
-        if not direction:
+    for r in raw_rows or []:
+        idx_name, sess_date, wkday, ent_t, ex_t, direction, ep, sp, tp, xp_raw, ex_reason, pts_raw, r_val, t_status = r
+        dir_u = str(direction or "").strip().upper()
+        if dir_u == "SHORT":
+            dir_u = "PUT"
+        elif dir_u == "LONG":
+            dir_u = "CALL"
+        if not dir_u:
             continue
-        ep = float(entry_p if entry_p is not None else (p_dict.get("entry_price") or 0.0))
-        xp = float(p_dict.get("exit_price") if p_dict.get("exit_price") is not None else (last_c or ep))
-        pts = float(p_dict.get("points") if p_dict.get("points") is not None else ((xp - ep) if str(direction).upper() == "CALL" else (ep - xp)))
-        r_val = float(p_dict.get("r_val") or 0.0)
+        ep_f = float(ep or 0.0)
+        xp_f = float(xp_raw if xp_raw is not None else ep_f)
+        if pts_raw is not None:
+            pts_f = float(pts_raw)
+        else:
+            pts_f = (xp_f - ep_f) if dir_u == "CALL" else (ep_f - xp_f)
+        reason_s = str(ex_reason or "").strip() or ("OPEN" if str(t_status or "").upper() == "OPEN" else "")
         records.append({
-            "index": str(idx_name or "").upper(),
-            "session_date": str(sess_date or ""),
-            "weekday": str(wkday or p_dict.get("weekday") or ""),
-            "entry_time": str(p_dict.get("entry_time") or bar_time or ""),
-            "exit_time": str(p_dict.get("exit_time") or bar_time or ""),
-            "direction": str(direction or "").upper(),
-            "entry_price": ep,
-            "sl_price": float(sl_p if sl_p is not None else (p_dict.get("sl_price") or ep)),
-            "target_price": float(tgt_p if tgt_p is not None else (p_dict.get("target_price") or ep)),
-            "exit_price": xp,
-            "exit_reason": str(p_dict.get("exit_reason") or status or ""),
-            "points": pts,
-            "r_val": r_val,
+            "index": str(idx_name or "").strip().upper(),
+            "session_date": str(sess_date or "").strip(),
+            "weekday": str(wkday or "").strip(),
+            "entry_time": str(ent_t or "").strip(),
+            "exit_time": str(ex_t or "").strip(),
+            "direction": dir_u,
+            "entry_price": ep_f,
+            "sl_price": float(sp or ep_f),
+            "target_price": float(tp or ep_f),
+            "exit_price": xp_f,
+            "exit_reason": reason_s,
+            "points": pts_f,
+            "r_val": float(r_val or 0.0),
             "data_source": "SUPABASE",
         })
     return pd.DataFrame(records, columns=cols) if records else pd.DataFrame(columns=cols)
-
 
 def _sanitize_and_dedup_trades_df(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:

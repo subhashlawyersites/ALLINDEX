@@ -1,0 +1,58 @@
+[
+  {
+    "id": "1795854045360_1",
+    "time": "2026-11-27 10:15 IST",
+    "index": "NIFTY50",
+    "type": "CONFIRMED_PUT",
+    "severity": "good",
+    "message": "NIFTY50 confirmed CONFIRMED_PUT @ 25801.0"
+  },
+  {
+    "id": "1795854045368_2",
+    "time": "2026-11-27 10:15 IST",
+    "index": "NIFTY50",
+    "type": "TRADE_MONITOR_STARTED",
+    "severity": "good",
+    "message": "Monitoring PUT entry=25801.0 SL=25872.6 Target=25758.04"
+  },
+  {
+    "id": "1795854053544_3",
+    "time": "2026-11-27 15:15 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_50PCT",
+    "severity": "good",
+    "message": "PUT reached 50% R target level (25765.2)"
+  },
+  {
+    "id": "1795854053568_4",
+    "time": "2026-11-27 15:15 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_60PCT",
+    "severity": "good",
+    "message": "PUT reached 60% R target level (25758.04)"
+  },
+  {
+    "id": "1795854053577_5",
+    "time": "2026-11-27 15:15 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_80PCT",
+    "severity": "good",
+    "message": "PUT reached 80% R target level (25743.72)"
+  },
+  {
+    "id": "1795854053585_6",
+    "time": "2026-11-27 15:15 IST",
+    "index": "NIFTY50",
+    "type": "MILESTONE_100PCT",
+    "severity": "good",
+    "message": "PUT reached 100% R target level (25729.4)"
+  },
+  {
+    "id": "1795854053617_7",
+    "time": "2026-11-27 15:15 IST",
+    "index": "NIFTY50",
+    "type": "EXIT_TARGET",
+    "severity": "good",
+    "message": "PUT 0.60R Target hit @ 25758.04"
+  }
+]

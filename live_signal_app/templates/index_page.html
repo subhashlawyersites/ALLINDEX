@@ -37,7 +37,10 @@
       <div class="row-kv"><span>Last Close:</span><strong data-last-close="{{ state.index_key }}">{{ state.last_close }}</strong></div>
       <div class="row-kv"><span>SMA(2) / SMA(10):</span><strong data-sma="{{ state.index_key }}">{{ state.sma2 }} / {{ state.sma10 }}</strong></div>
       <div class="row-kv"><span>Armed Direction:</span><strong data-armed="{{ state.index_key }}">{{ state.armed_dir or 'None' }}</strong></div>
-      <div class="row-kv"><span>Entry / SL / Target(0.60R):</span><strong data-est="{{ state.index_key }}">{{ state.entry_price or '-' }} / {{ state.stop_price or '-' }} / {{ state.target_price or '-' }}</strong></div>
+      <div class="row-kv"><span>Entry Time:</span><strong data-entry-time="{{ state.index_key }}">{{ state.entry_time or state.last_bar_time or '-' }}</strong></div>
+      <div class="row-kv"><span>ENTRY:</span><strong data-est="{{ state.index_key }}">{{ state.entry_price or '-' }}</strong></div>
+      <div class="row-kv"><span>SL:</span><strong class="neg" data-sl-price="{{ state.index_key }}">{{ state.stop_price or '-' }}</strong></div>
+      <div class="row-kv"><span>TARGET (60% - 100%):</span><strong class="pos" data-target-range="{{ state.index_key }}">{{ state.target_price or '-' }}{% if state.target_ladder and state.target_ladder.levels and state.target_ladder.levels[-1].price != state.target_price %} - {{ state.target_ladder.levels[-1].price }}{% endif %}</strong></div>
       <div class="row-kv"><span>Trades Today:</span><strong data-trades="{{ state.index_key }}">{{ state.trades_today }} / {{ rules.max_trades_per_day }}</strong></div>
       <p class="muted" style="margin-top:8px;" data-status-reason="{{ state.index_key }}">{{ state.status_reason }}</p>
     </div>
@@ -72,6 +75,745 @@
       {% endfor %}
     </div>
   </div>
+
+<!-- TradingView-Style Target & SL Percentage Bars + Speedometer/Odometer Needle Gauges -->
+<section id="tvTradeTelemetry" style="margin-top:14px;">
+  <style>
+    #tvTradeTelemetry .tv-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.78);
+      backdrop-filter: blur(4px);
+      z-index: 990;
+    }
+    #tvTradeTelemetry.is-expanded .tv-backdrop {
+      display: block;
+    }
+    #tvTradeTelemetry.is-expanded .tv-panel {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(1160px, 95vw);
+      max-height: 92vh;
+      overflow-y: auto;
+      z-index: 1000;
+      padding: 18px 20px;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.72);
+    }
+    #tvTradeTelemetry .tv-panel {
+      background: var(--card-bg, #131722);
+      border: 1px solid var(--border, rgba(148, 163, 184, 0.24));
+      border-radius: 12px;
+      padding: 14px 16px;
+      color: var(--text, #e2e8f0);
+      font-variant-numeric: tabular-nums;
+    }
+    #tvTradeTelemetry .tv-panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border, rgba(148, 163, 184, 0.16));
+      font-size: 14px;
+    }
+    #tvTradeTelemetry .tv-head-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    #tvTradeTelemetry .tv-badge-tag {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      padding: 3px 9px;
+      border-radius: 5px;
+      background: rgba(41, 98, 255, 0.16);
+      color: #7aa2ff;
+      border: 1px solid rgba(41, 98, 255, 0.38);
+    }
+    #tvTradeTelemetry .tv-expand-btn {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 11px;
+      border-radius: 6px;
+      cursor: pointer;
+      color: #f8fafc;
+      background: rgba(30, 41, 59, 0.95);
+      border: 1px solid rgba(148, 163, 184, 0.42);
+    }
+    #tvTradeTelemetry .tv-expand-btn:hover {
+      border-color: #38bdf8;
+      background: rgba(51, 65, 85, 0.95);
+    }
+    #tvTradeTelemetry .tv-bars-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    #tvTradeTelemetry .tv-bar-card {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid var(--border, rgba(148, 163, 184, 0.2));
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    #tvTradeTelemetry .tv-bar-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    #tvTradeTelemetry .tv-live-pill {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+    }
+    #tvTradeTelemetry .tv-split-track-row {
+      display: grid;
+      grid-template-columns: 3.2fr 1fr;
+      gap: 10px;
+      align-items: center;
+    }
+    #tvTradeTelemetry .tv-zone-col { display: flex; flex-direction: column; gap: 5px; }
+    #tvTradeTelemetry .tv-zone-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 600;
+      opacity: 0.9;
+    }
+    #tvTradeTelemetry .tv-rail {
+      position: relative;
+      height: 15px;
+      border-radius: 4px;
+      background: rgba(148, 163, 184, 0.16);
+      overflow: visible;
+    }
+    #tvTradeTelemetry .tv-rail-shadow {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 0%;
+      border-radius: 4px;
+      opacity: 0.34;
+      transition: width 0.2s ease;
+      pointer-events: none;
+    }
+    #tvTradeTelemetry .tv-rail-fill {
+      position: relative;
+      z-index: 2;
+      height: 100%;
+      width: 0%;
+      border-radius: 4px;
+      transition: width 0.2s ease;
+    }
+    #tvTradeTelemetry .tv-rail-shadow.tgt { background: #26a69a; }
+    #tvTradeTelemetry .tv-rail-fill.tgt { background: #089981; }
+    #tvTradeTelemetry .tv-rail-shadow.tgt-ext { background: #2962ff; }
+    #tvTradeTelemetry .tv-rail-fill.tgt-ext { background: #1e53e5; }
+    #tvTradeTelemetry .tv-rail-shadow.sl { background: #ef5350; }
+    #tvTradeTelemetry .tv-rail-fill.sl { background: #f23645; }
+    #tvTradeTelemetry .tv-rail-shadow.sl-ext { background: #f59e0b; }
+    #tvTradeTelemetry .tv-rail-fill.sl-ext { background: #d97706; }
+    #tvTradeTelemetry .tv-pointer {
+      position: absolute;
+      top: -4px;
+      width: 2.5px;
+      height: 23px;
+      background: #ffffff;
+      box-shadow: 0 0 6px rgba(255, 255, 255, 0.85);
+      z-index: 4;
+      transform: translateX(-1px);
+      transition: left 0.2s ease;
+    }
+    #tvTradeTelemetry .tv-pointer-pct {
+      position: absolute;
+      top: 20px;
+      transform: translateX(-50%);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    #tvTradeTelemetry .tv-bar-foot {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 24px;
+      font-size: 12px;
+      opacity: 0.9;
+    }
+    #tvTradeTelemetry .tv-gauges-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+      gap: 14px;
+    }
+    #tvTradeTelemetry .tv-gauge-card {
+      background: radial-gradient(circle at 50% 38%, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.96));
+      border: 1px solid rgba(148, 163, 184, 0.26);
+      border-radius: 12px;
+      padding: 12px 14px;
+    }
+    #tvTradeTelemetry.is-expanded .tv-gauge-svg {
+      height: 195px;
+    }
+    #tvTradeTelemetry .tv-gauge-svg-box {
+      width: 100%;
+      max-width: 320px;
+      margin: 0 auto;
+    }
+    #tvTradeTelemetry .tv-gauge-svg {
+      width: 100%;
+      height: 166px;
+      overflow: visible;
+      display: block;
+    }
+    #tvTradeTelemetry .tv-bezel-ring {
+      fill: none;
+      stroke: rgba(217, 179, 120, 0.42);
+      stroke-width: 2.5;
+    }
+    #tvTradeTelemetry .tv-arc-bg {
+      fill: none;
+      stroke: rgba(148, 163, 184, 0.2);
+      stroke-width: 12;
+      stroke-linecap: round;
+    }
+    #tvTradeTelemetry .tv-arc-shd {
+      fill: none;
+      stroke: rgba(226, 232, 240, 0.28);
+      stroke-width: 12;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.22s ease;
+    }
+    #tvTradeTelemetry .tv-arc-cur {
+      fill: none;
+      stroke-width: 12;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.22s ease;
+    }
+    #tvTradeTelemetry .tv-tick-label {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 10px;
+      font-weight: 700;
+      fill: #cbd5e1;
+      text-anchor: middle;
+    }
+    #tvTradeTelemetry .tv-needle-shd {
+      stroke-width: 2.4;
+      stroke-dasharray: 4 3;
+      stroke-linecap: round;
+      opacity: 0.72;
+      transition: transform 0.22s ease;
+    }
+    #tvTradeTelemetry .tv-needle-cur {
+      stroke-width: 3.6;
+      stroke-linecap: round;
+      transition: transform 0.22s ease;
+    }
+    #tvTradeTelemetry .tv-odo-window {
+      margin: -6px auto 0;
+      width: fit-content;
+      min-width: 150px;
+      text-align: center;
+      padding: 5px 12px;
+      border-radius: 6px;
+      background: linear-gradient(180deg, #0b1220, #162238);
+      border: 1px solid rgba(186, 230, 253, 0.35);
+      box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.65);
+    }
+    #tvTradeTelemetry .tv-gauge-val {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 23px;
+      font-weight: 800;
+      color: #f8fafc;
+      line-height: 1.15;
+    }
+    #tvTradeTelemetry .tv-gauge-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      opacity: 0.92;
+    }
+    #tvTradeTelemetry .tv-advice-box {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 9px;
+      border-left: 4px solid #38bdf8;
+      background: rgba(15, 23, 42, 0.85);
+      border-top: 1px solid rgba(148, 163, 184, 0.18);
+      border-right: 1px solid rgba(148, 163, 184, 0.18);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    #tvTradeTelemetry .tv-advice-main {
+      font-size: 14px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+    #tvTradeTelemetry .tv-advice-sub {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+  </style>
+
+  <div class="tv-backdrop" id="tvTelemetryBackdrop"></div>
+
+  <div class="tv-panel">
+    <div class="tv-panel-head">
+      <strong>Live Excursion &amp; Speedometer / Odometer Telemetry</strong>
+      <div class="tv-head-actions">
+        <span class="tv-badge-tag" id="tvTelemetryContext">TARGET &amp; SL EXCURSION + PEAK SHADOW</span>
+        <button type="button" class="tv-expand-btn" id="tvExpandBtn" aria-expanded="false">Expand Popup</button>
+      </div>
+    </div>
+
+    <!-- Separate Target & SL Percentage Bars (0-100% & >100% with Live Actual % & Shadow) -->
+    <div class="tv-bars-grid">
+      <div class="tv-bar-card">
+        <div class="tv-bar-top">
+          <strong>Target Side Progress</strong>
+          <span class="tv-live-pill" id="targetSideBadge">Now: 0.0% | Peak: 0.0%</span>
+        </div>
+        <div class="tv-split-track-row">
+          <div class="tv-zone-col">
+            <div class="tv-zone-meta"><span>0%&ndash;100%</span><span id="targetCorePctTxt">0.0%</span></div>
+            <div class="tv-rail" id="targetTrack">
+
+
+<div class="tv-rail-shadow tgt" id="targetShadowBar"></div>
+              <div class="tv-rail-fill tgt" id="targetCurrentBar"></div>
+              <div class="tv-pointer" id="targetLivePointer" style="left:0%;"><span class="tv-pointer-pct" id="targetLiveTag">0.0%</span></div>
+            </div>
+          </div>
+          <div class="tv-zone-col">
+            <div class="tv-zone-meta"><span>&gt;100%</span><span id="targetExtPctTxt">+0.0%</span></div>
+            <div class="tv-rail" id="targetExtTrack">
+              <div class="tv-rail-shadow tgt-ext" id="targetExtShadowBar"></div>
+              <div class="tv-rail-fill tgt-ext" id="targetExtCurrentBar"></div>
+              <div class="tv-pointer" id="targetExtPointer" style="left:0%;"><span class="tv-pointer-pct" id="targetExtTag">0.0%</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="tv-bar-foot">
+          <span id="targetPeakPrice">High Reached: -</span>
+          <span id="targetRevNote">State: Idle</span>
+        </div>
+      </div>
+
+      <div class="tv-bar-card">
+        <div class="tv-bar-top">
+          <strong>SL Side Progress</strong>
+          <span class="tv-live-pill" id="slSideBadge">Now: 0.0% | Peak: 0.0%</span>
+        </div>
+        <div class="tv-split-track-row">
+          <div class="tv-zone-col">
+            <div class="tv-zone-meta"><span>0%&ndash;100%</span><span id="slCorePctTxt">0.0%</span></div>
+            <div class="tv-rail" id="slTrack">
+              <div class="tv-rail-shadow sl" id="slShadowBar"></div>
+              <div class="tv-rail-fill sl" id="slCurrentBar"></div>
+              <div class="tv-pointer" id="slLivePointer" style="left:0%;"><span class="tv-pointer-pct" id="slLiveTag">0.0%</span></div>
+            </div>
+          </div>
+          <div class="tv-zone-col">
+            <div class="tv-zone-meta"><span>&gt;100%</span><span id="slExtPctTxt">+0.0%</span></div>
+            <div class="tv-rail" id="slExtTrack">
+              <div class="tv-rail-shadow sl-ext" id="slExtShadowBar"></div>
+              <div class="tv-rail-fill sl-ext" id="slExtCurrentBar"></div>
+              <div class="tv-pointer" id="slExtPointer" style="left:0%;"><span class="tv-pointer-pct" id="slExtTag">0.0%</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="tv-bar-foot">
+          <span id="slPeakPrice">Worst Reached: -</span>
+          <span id="slRevNote">State: Idle</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Speedometer / Odometer Needle Gauges (Bezel + Color Arc + Lower Odometer Window) -->
+    <div class="tv-gauges-grid">
+      <div class="tv-gauge-card">
+        <div class="tv-bar-top">
+          <strong>Target Speedometer / Odometer</strong>
+          <span class="tv-live-pill" id="targetOdometer">000.0%</span>
+        </div>
+        <div class="tv-gauge-svg-box">
+          <svg class="tv-gauge-svg" viewBox="0 0 240 136">
+            <defs>
+              <linearGradient id="tgtColorGrad" x1="0%" y1="50%" x2="100%" y2="50%">
+                <stop offset="0%" stop-color="#38bdf8" />
+                <stop offset="50%" stop-color="#22c55e" />
+                <stop offset="82%" stop-color="#facc15" />
+                <stop offset="100%" stop-color="#3b82f6" />
+              </linearGradient>
+            </defs>
+            <circle class="tv-bezel-ring" cx="120" cy="116" r="94" />
+            <path class="tv-arc-bg" d="M 36 116 A 84 84 0 0 1 204 116" />
+            <path class="tv-arc-shd" id="targetArcShadow" d="M 36 116 A 84 84 0 0 1 204 116" stroke-dasharray="263.9" stroke-dashoffset="263.9" />
+            <path class="tv-arc-cur" id="targetArcFill" stroke="url(#tgtColorGrad)" d="M 36 116 A 84 84 0 0 1 204 116" stroke-dasharray="263.9" stroke-dashoffset="263.9" />
+            <text class="tv-tick-label" x="32" y="129">0%</text>
+            <text class="tv-tick-label" x="62" y="54">50%</text>
+            <text class="tv-tick-label" x="120" y="24">100%</text>
+            <text class="tv-tick-label" x="178" y="54">125%</text>
+            <text class="tv-tick-label" x="208" y="129">150%</text>
+            <g id="targetShadowNeedle" transform="rotate(-90 120 116)">
+              <line x1="120" y1="116" x2="120" y2="44" stroke="#86efac" class="tv-needle-shd" />
+            </g>
+            <g id="targetLiveNeedle" transform="rotate(-90 120 116)">
+              <line x1="120" y1="116" x2="120" y2="35" stroke="#f97316" class="tv-needle-cur" />
+              <circle cx="120" cy="116" r="6" fill="#f8fafc" stroke="#0f172a" stroke-width="2" />
+            </g>
+          </svg>
+        </div>
+        <div class="tv-odo-window">
+          <div class="tv-gauge-val" id="targetNeedlePct">0.0%</div>
+        </div>
+        <div class="tv-gauge-meta">
+          <span id="targetNeedlePeak">Peak Shadow: 0.0%</span>
+          <span id="targetNeedleStatus">Tracking Live</span>
+        </div>
+      </div>
+
+      <div class="tv-gauge-card">
+        <div class="tv-bar-top">
+          <strong>SL Speedometer / Odometer</strong>
+          <span class="tv-live-pill" id="slOdometer">000.0%</span>
+        </div>
+        <div class="tv-gauge-svg-box">
+          <svg class="tv-gauge-svg" viewBox="0 0 240 136">
+            <defs>
+              <linearGradient id="slColorGrad" x1="0%" y1="50%" x2="100%" y2="50%">
+                <stop offset="0%" stop-color="#38bdf8" />
+                <stop offset="55%" stop-color="#f59e0b" />
+                <stop offset="100%" stop-color="#ef4444" />
+              </linearGradient>
+            </defs>
+            <circle class="tv-bezel-ring" cx="120" cy="116" r="94" />
+            <path class="tv-arc-bg" d="M 36 116 A 84 84 0 0 1 204 116" />
+            <path class="tv-arc-shd" id="slArcShadow" d="M 36 116 A 84 84 0 0 1 204 116" stroke-dasharray="263.9" stroke-dashoffset="263.9" />
+            <path class="tv-arc-cur" id="slArcFill" stroke="url(#slColorGrad)" d="M 36 116 A 84 84 0 0 1 204 116" stroke-dasharray="263.9" stroke-dashoffset="263.9" />
+            <text class="tv-tick-label" x="32" y="129">0%</text>
+            <text class="tv-tick-label" x="62" y="54">50%</text>
+            <text class="tv-tick-label" x="120" y="24">100%</text>
+            <text class="tv-tick-label" x="178" y="54">125%</text>
+            <text class="tv-tick-label" x="208" y="129">150%</text>
+            <g id="slShadowNeedle" transform="rotate(-90 120 116)">
+              <line x1="120" y1="116" x2="120" y2="44" stroke="#fca5a5" class="tv-needle-shd" />
+            </g>
+            <g id="slLiveNeedle" transform="rotate(-90 120 116)">
+              <line x1="120" y1="116" x2="120" y2="35" stroke="#fb7185" class="tv-needle-cur" />
+              <circle cx="120" cy="116" r="6" fill="#f8fafc" stroke="#0f172a" stroke-width="2" />
+            </g>
+          </svg>
+        </div>
+        <div class="tv-odo-window">
+          <div class="tv-gauge-val" id="slNeedlePct">0.0%</div>
+        </div>
+        <div class="tv-gauge-meta">
+          <span id="slNeedlePeak">Peak Shadow: 0.0%</span>
+          <span id="slNeedleStatus">Tracking Live</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contextual Trading Guidance Banner Below Gauges -->
+    <div class="tv-advice-box" id="tvAdviceBox">
+      <div class="tv-advice-main" id="tvAdviceText">Monitoring live NIFTY setup ? waiting for active trade excursion.</div>
+      <div class="tv-advice-sub" id="tvAdviceSub">Rules: Primary exit at 60% (0.6R) | Full ladder up to 100% (1.0R) | Respect cutoff &amp; daily trade cap.</div>
+    </div>
+  </div>
+</section>
+
+<script>
+  (function() {
+    const EXT_SCALE_MAX = 50;
+    const ARC_LEN = 263.9;
+    const DIAL_MAX_PCT = 150;
+
+    // Popup / Expand toggle (click button, backdrop, or press Escape)
+    const secEl = document.getElementById("tvTradeTelemetry");
+    const expBtn = document.getElementById("tvExpandBtn");
+    const backdropEl = document.getElementById("tvTelemetryBackdrop");
+    function setExpanded(flag) {
+      if (!secEl || !expBtn) return;
+      secEl.classList.toggle("is-expanded", Boolean(flag));
+      expBtn.setAttribute("aria-expanded", String(Boolean(flag)));
+      expBtn.textContent = flag ? "Close Popup" : "Expand Popup";
+    }
+    if (expBtn) expBtn.addEventListener("click", () => setExpanded(!secEl.classList.contains("is-expanded")));
+    if (backdropEl) backdropEl.addEventListener("click", () => setExpanded(false));
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && secEl && secEl.classList.contains("is-expanded")) setExpanded(false);
+    });
+
+    function clampFloorZero(v) {
+      return Number.isFinite(v) ? Math.max(0, v) : 0;
+    }
+
+    function fmtPct(v) {
+      return `${Number(v || 0).toFixed(1)}%`;
+    }
+
+    function fmtOdometer(pct) {
+      return `${Math.max(0, Number(pct) || 0).toFixed(1).padStart(5, "0")}%`;
+    }
+
+    function pctToAngleDeg(pct) {
+      const clamped = Math.max(0, Math.min(DIAL_MAX_PCT, Number(pct) || 0));
+      return -90 + (clamped / DIAL_MAX_PCT) * 180;
+    }
+
+    function paintNeedle(prefix, curPct, peakPct) {
+      const effPeak = Math.max(Number(curPct) || 0, Number(peakPct) || 0);
+      const paintSig = `${prefix}|${Number(curPct).toFixed(2)}|${effPeak.toFixed(2)}`;
+      window.__lastPaintNeedleSig = window.__lastPaintNeedleSig || {};
+      if (window.__lastPaintNeedleSig[paintSig.split("|")[0]] === paintSig) return;
+      window.__lastPaintNeedleSig[paintSig.split("|")[0]] = paintSig;
+      const curAngle = pctToAngleDeg(curPct);
+      const peakAngle = pctToAngleDeg(effPeak);
+      const curRatio = Math.max(0, Math.min(1, (Number(curPct) || 0) / DIAL_MAX_PCT));
+      const peakRatio = Math.max(0, Math.min(1, effPeak / DIAL_MAX_PCT));
+
+      const arcFill = document.getElementById(`${prefix}ArcFill`);
+      const arcShadow = document.getElementById(`${prefix}ArcShadow`);
+      const liveNeedle = document.getElementById(`${prefix}LiveNeedle`);
+      const shadowNeedle = document.getElementById(`${prefix}ShadowNeedle`);
+      const odoEl = document.getElementById(`${prefix}Odometer`);
+      const bigPctEl = document.getElementById(`${prefix}NeedlePct`);
+      const peakEl = document.getElementById(`${prefix}NeedlePeak`);
+      const statusEl = document.getElementById(`${prefix}NeedleStatus`);
+
+      if (arcFill) arcFill.style.strokeDashoffset = (ARC_LEN * (1 - curRatio)).toFixed(2);
+      if (arcShadow) arcShadow.style.strokeDashoffset = (ARC_LEN * (1 - peakRatio)).toFixed(2);
+      if (liveNeedle) {
+        liveNeedle.style.transform = "";
+        liveNeedle.setAttribute("transform", `rotate(${curAngle.toFixed(1)} 120 116)`);
+      }
+      if (shadowNeedle) {
+        shadowNeedle.style.transform = "";
+        shadowNeedle.setAttribute("transform", `rotate(${peakAngle.toFixed(1)} 120 116)`);
+      }
+      if (odoEl) {
+        odoEl.textContent = `${fmtOdometer(curPct)} / ${fmtOdometer(effPeak)}`;
+      }
+      if (bigPctEl) bigPctEl.textContent = fmtPct(curPct);
+      if (peakEl) peakEl.textContent = `Peak Shadow: ${fmtPct(effPeak)}`;
+      if (statusEl) {
+        const diff = effPeak - (Number(curPct) || 0);
+        statusEl.textContent = diff > 0.5 ? `Pulled back -${diff.toFixed(1)}%` : "Tracking Live";
+      }
+    }
+
+    function updateAdviceBanner(curTargetPct, tPeak, curSlPct, sPeak, cfg) {
+      const box = document.getElementById("tvAdviceBox");
+      const mainEl = document.getElementById("tvAdviceText");
+      const subEl = document.getElementById("tvAdviceSub");
+      if (!box || !mainEl || !subEl) return;
+
+      const statusText = String((cfg && cfg.status) || "").toUpperCase();
+      const tradesToday = String((cfg && cfg.tradesToday) || "");
+      const noTradeFlag = Boolean(cfg && cfg.noTrade) || statusText.includes("NO_TRADE") || statusText.includes("BLOCKED");
+
+      let msg = "Monitoring live setup ? stay disciplined and wait for clear progress.";
+      let borderCol = "#38bdf8";
+
+      if (noTradeFlag) {
+        msg = "No trade for Nifty today ? take rest and protect capital.";
+        borderCol = "#94a3b8";
+      } else if (curSlPct >= 100 || sPeak >= 100) {
+        msg = "SL hit ? Don't worry, more winning trades are ahead. Take rest, no overtrading.";
+        borderCol = "#ef4444";
+      } else if (curTargetPct >= 100) {
+        msg = "100% ? Full target hit, congrats! Trail or lock gains cleanly.";
+        borderCol = "#22c55e";
+      } else if (curTargetPct >= 80) {
+        msg = "80% achieved ? Good news! Strong momentum toward 100% target.";
+        borderCol = "#10b981";
+      } else if (curTargetPct >= 60) {
+        msg = "60% target achieved ? Exit now (primary target zone) or trail carefully.";
+        borderCol = "#089981";
+      } else if (curTargetPct >= 50) {
+        msg = "Hey, 50% achieved ? Get ready for exit at 60%.";
+        borderCol = "#eab308";
+      } else if (curSlPct >= 70) {
+        msg = "Caution: Price moving close to Stop Loss ? watch risk and avoid impulsive entries.";
+        borderCol = "#f97316";
+      }
+
+      mainEl.textContent = msg;
+      box.style.borderLeftColor = borderCol;
+      subEl.textContent = `Target Now: ${fmtPct(curTargetPct)} (Peak ${fmtPct(tPeak)}) | SL Now: ${fmtPct(curSlPct)} (Peak ${fmtPct(sPeak)})${tradesToday ? ` | Trades: ${tradesToday}` : ""}`;
+    }
+
+    window.updateTradeSideMeters = function(cfg) {
+      if (!cfg) return;
+      const dir = String(cfg.direction || "").toUpperCase();
+      const entry = Number(cfg.entry);
+      const target = Number(cfg.target);
+      const sl = Number(cfg.sl);
+      const spot = Number(cfg.spot);
+      const tradeKey = String(cfg.tradeKey || `${dir}|${entry}|${target}|${sl}`);
+
+      const meterSig = `${tradeKey}|${dir}|${entry}|${target}|${sl}|${spot}`;
+      if (window.__lastAppliedMeterSig === meterSig) return;
+      window.__lastAppliedMeterSig = meterSig;
+
+      const hasValidTradeKey = Number.isFinite(entry) && !tradeKey.endsWith("|");
+      if (!window.__tvExcursionStore) {
+        window.__tvExcursionStore = {
+          key: tradeKey,
+          peakTargetPct: 0,
+          peakSlPct: 0,
+          peakTargetPrice: null,
+          peakSlPrice: null
+        };
+      } else if (hasValidTradeKey && window.__tvExcursionStore.key !== tradeKey) {
+        window.__tvExcursionStore = {
+          key: tradeKey,
+          peakTargetPct: 0,
+          peakSlPct: 0,
+          peakTargetPrice: null,
+          peakSlPrice: null
+        };
+      }
+
+      let curTargetPct = 0;
+      let curSlPct = 0;
+
+      if ([entry, target, sl, spot].every(Number.isFinite)) {
+        const tgtSpan = Math.abs(target - entry);
+        const slSpan = Math.abs(entry - sl);
+        if (dir === "PUT" || dir === "SHORT") {
+          if (tgtSpan > 0) curTargetPct = clampFloorZero(((entry - spot) / tgtSpan) * 100);
+          if (slSpan > 0) curSlPct = clampFloorZero(((spot - entry) / slSpan) * 100);
+        } else {
+          if (tgtSpan > 0) curTargetPct = clampFloorZero(((spot - entry) / tgtSpan) * 100);
+          if (slSpan > 0) curSlPct = clampFloorZero(((entry - spot) / slSpan) * 100);
+        }
+
+        if (curTargetPct >= window.__tvExcursionStore.peakTargetPct) {
+          window.__tvExcursionStore.peakTargetPct = curTargetPct;
+          window.__tvExcursionStore.peakTargetPrice = spot;
+        }
+        if (curSlPct >= window.__tvExcursionStore.peakSlPct) {
+          window.__tvExcursionStore.peakSlPct = curSlPct;
+          window.__tvExcursionStore.peakSlPrice = spot;
+        }
+      }
+
+      const tPeak = window.__tvExcursionStore.peakTargetPct;
+      const tCoreCur = Math.min(100, curTargetPct);
+      const tCorePeak = Math.min(100, tPeak);
+      const tOverCur = Math.max(0, curTargetPct - 100);
+      const tOverPeak = Math.max(0, tPeak - 100);
+      const tExtPos = Math.min(100, (tOverCur / EXT_SCALE_MAX) * 100);
+      const tExtShdPos = Math.min(100, (tOverPeak / EXT_SCALE_MAX) * 100);
+
+      const tFill = document.getElementById("targetCurrentBar");
+      const tShadow = document.getElementById("targetShadowBar");
+      const tPtr = document.getElementById("targetLivePointer");
+      const tTag = document.getElementById("targetLiveTag");
+      const tExtFill = document.getElementById("targetExtCurrentBar");
+      const tExtShadow = document.getElementById("targetExtShadowBar");
+      const tExtPtr = document.getElementById("targetExtPointer");
+      const tExtTag = document.getElementById("targetExtTag");
+      const tBadge = document.getElementById("targetSideBadge");
+      const tCoreTxt = document.getElementById("targetCorePctTxt");
+      const tExtTxt = document.getElementById("targetExtPctTxt");
+      const tPeakEl = document.getElementById("targetPeakPrice");
+      const tRevEl = document.getElementById("targetRevNote");
+
+      if (tFill) tFill.style.width = `${tCoreCur.toFixed(1)}%`;
+      if (tShadow) tShadow.style.width = `${tCorePeak.toFixed(1)}%`;
+      if (tPtr) tPtr.style.left = `${tCoreCur.toFixed(1)}%`;
+      if (tTag) tTag.textContent = fmtPct(curTargetPct);
+      if (tExtFill) tExtFill.style.width = `${tExtPos.toFixed(1)}%`;
+      if (tExtShadow) tExtShadow.style.width = `${tExtShdPos.toFixed(1)}%`;
+      if (tExtPtr) tExtPtr.style.left = `${tExtPos.toFixed(1)}%`;
+      if (tExtTag) tExtTag.textContent = curTargetPct > 100 ? fmtPct(curTargetPct) : fmtPct(tOverCur);
+      if (tBadge) tBadge.textContent = `Now: ${fmtPct(curTargetPct)} | Peak: ${fmtPct(tPeak)}`;
+      if (tCoreTxt) tCoreTxt.textContent = `${fmtPct(tCoreCur)} (Shd ${fmtPct(tCorePeak)})`;
+      if (tExtTxt) tExtTxt.textContent = tOverPeak > 0 ? `+${tOverCur.toFixed(1)}% (Shd +${tOverPeak.toFixed(1)}%)` : `+${tOverCur.toFixed(1)}%`;
+      if (tPeakEl) {
+        tPeakEl.textContent = window.__tvExcursionStore.peakTargetPrice != null
+          ? `High Reached: ${window.__tvExcursionStore.peakTargetPrice.toFixed(2)}`
+          : "High Reached: -";
+      }
+      if (tRevEl) {
+        const diff = tPeak - curTargetPct;
+        tRevEl.textContent = diff > 0.5 ? `Reversed -${diff.toFixed(1)}% from peak` : (curTargetPct >= 100 ? `Extended (${fmtPct(curTargetPct)})` : "At / Near Peak");
+      }
+      paintNeedle("target", curTargetPct, tPeak);
+
+      const sPeak = window.__tvExcursionStore.peakSlPct;
+      const sCoreCur = Math.min(100, curSlPct);
+      const sCorePeak = Math.min(100, sPeak);
+      const sOverCur = Math.max(0, curSlPct - 100);
+      const sOverPeak = Math.max(0, sPeak - 100);
+      const sExtPos = Math.min(100, (sOverCur / EXT_SCALE_MAX) * 100);
+      const sExtShdPos = Math.min(100, (sOverPeak / EXT_SCALE_MAX) * 100);
+
+      const sFill = document.getElementById("slCurrentBar");
+      const sShadow = document.getElementById("slShadowBar");
+      const sPtr = document.getElementById("slLivePointer");
+      const sTag = document.getElementById("slLiveTag");
+      const sExtFill = document.getElementById("slExtCurrentBar");
+      const sExtShadow = document.getElementById("slExtShadowBar");
+      const sExtPtr = document.getElementById("slExtPointer");
+      const sExtTag = document.getElementById("slExtTag");
+      const sBadge = document.getElementById("slSideBadge");
+      const sCoreTxt = document.getElementById("slCorePctTxt");
+      const sExtTxt = document.getElementById("slExtPctTxt");
+      const sPeakEl = document.getElementById("slPeakPrice");
+      const sRevEl = document.getElementById("slRevNote");
+
+      if (sFill) sFill.style.width = `${sCoreCur.toFixed(1)}%`;
+      if (sShadow) sShadow.style.width = `${sCorePeak.toFixed(1)}%`;
+      if (sPtr) sPtr.style.left = `${sCoreCur.toFixed(1)}%`;
+      if (sTag) sTag.textContent = fmtPct(curSlPct);
+      if (sExtFill) sExtFill.style.width = `${sExtPos.toFixed(1)}%`;
+      if (sExtShadow) sExtShadow.style.width = `${sExtShdPos.toFixed(1)}%`;
+      if (sExtPtr) sExtPtr.style.left = `${sExtPos.toFixed(1)}%`;
+      if (sExtTag) sExtTag.textContent = curSlPct > 100 ? fmtPct(curSlPct) : fmtPct(sOverCur);
+      if (sBadge) sBadge.textContent = `Now: ${fmtPct(curSlPct)} | Peak: ${fmtPct(sPeak)}`;
+      if (sCoreTxt) sCoreTxt.textContent = `${fmtPct(sCoreCur)} (Shd ${fmtPct(sCorePeak)})`;
+      if (sExtTxt) sExtTxt.textContent = sOverPeak > 0 ? `+${sOverCur.toFixed(1)}% (Shd +${sOverPeak.toFixed(1)}%)` : `+${sOverCur.toFixed(1)}%`;
+      if (sPeakEl) {
+        sPeakEl.textContent = window.__tvExcursionStore.peakSlPrice != null
+          ? `Worst Reached: ${window.__tvExcursionStore.peakSlPrice.toFixed(2)}`
+          : "Worst Reached: -";
+      }
+      if (sRevEl) {
+        const diff = sPeak - curSlPct;
+        sRevEl.textContent = diff > 0.5 ? `Recovered -${diff.toFixed(1)}% from peak` : (curSlPct >= 100 ? `Overrun (${fmtPct(curSlPct)})` : "At / Near Peak");
+      }
+      paintNeedle("sl", curSlPct, sPeak);
+
+      updateAdviceBanner(curTargetPct, tPeak, curSlPct, sPeak, cfg);
+    };
+  })();
+</script>
+
 
   <div class="card" style="margin-top:16px;">
     <h3 style="margin-top:0;">Target Percentage Levels &amp; Exit Reference Chart</h3>
@@ -119,6 +861,101 @@
         </tbody>
       </table>
     </div>
+
+    <details class="card" id="session-lifecycle-panel" style="margin-top:16px;">
+      <summary style="cursor:pointer;font-weight:600;display:flex;justify-content:space-between;align-items:center;">
+        <span>Session Lifecycle &amp; Milestone Timestamps (50%&ndash;100% / SL / EOD) &middot; {{ state.index_key }}</span>
+        <button type="button" id="lc-refresh-btn" style="padding:4px 10px;font-size:12px;cursor:pointer;">Refresh</button>
+      </summary>
+      <div style="margin-top:12px;overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Event Time (IST)</th>
+              <th>Recorded At</th>
+              <th>Trade ID</th>
+              <th>Event</th>
+              <th>Dir</th>
+              <th>Level %</th>
+              <th>Price</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="lc-events-tbody">
+            <tr><td colspan="8" class="muted">Expand section to load session lifecycle events for {{ state.index_key }}.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+    <script>
+      (function () {
+        const panel = document.getElementById("session-lifecycle-panel");
+        const tbody = document.getElementById("lc-events-tbody");
+        const btn = document.getElementById("lc-refresh-btn");
+        const idxKey = {{ state.index_key | tojson }};
+        let loadedOnce = false;
+
+        function esc(val) {
+          return String(val ?? "").replace(/[&<>"']/g, function (ch) {
+            return {
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;"
+            }[ch];
+          });
+        }
+
+        async function loadLifecycleEvents() {
+          tbody.innerHTML = '<tr><td colspan="8" class="muted">Loading session lifecycle events...</td></tr>';
+          try {
+            const resp = await fetch('/api/lifecycle-events?index=' + encodeURIComponent(idxKey), { cache: 'no-store' });
+            const data = await resp.json();
+            const rows = Array.isArray(data.events) ? data.events.slice().reverse() : [];
+            if (!rows.length) {
+              tbody.innerHTML = '<tr><td colspan="8" class="muted">No lifecycle events recorded yet for ' + esc(idxKey) + '.</td></tr>';
+              return;
+            }
+            tbody.innerHTML = rows.map(function (ev) {
+              const lvlText = (ev.level_pct !== null && ev.level_pct !== undefined) ? (ev.level_pct + '%') : '-';
+              const priceText = (ev.price !== null && ev.price !== undefined) ? ev.price : '-';
+              return (
+                '<tr>' +
+                  '<td>' + esc(ev.event_ts_ist) + '</td>' +
+                  '<td class="muted">' + esc(ev.recorded_at_ist) + '</td>' +
+                  '<td>' + esc(ev.trade_id || '-') + '</td>' +
+                  '<td><strong>' + esc(ev.event_type) + '</strong></td>' +
+                  '<td>' + esc(ev.direction || '-') + '</td>' +
+                  '<td>' + esc(lvlText) + '</td>' +
+                  '<td>' + esc(priceText) + '</td>' +
+                  '<td>' + esc(ev.message || '') + '</td>' +
+                '</tr>'
+              );
+            }).join('');
+          } catch (err) {
+            tbody.innerHTML = '<tr><td colspan="8" class="muted">Could not load lifecycle events.</td></tr>';
+          }
+        }
+
+        if (panel) {
+          panel.addEventListener("toggle", function () {
+            if (panel.open && !loadedOnce) {
+              loadedOnce = true;
+              loadLifecycleEvents();
+            }
+          });
+        }
+        if (btn) {
+          btn.addEventListener("click", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            loadedOnce = true;
+            loadLifecycleEvents();
+          });
+        }
+      })();
+    </script>
   </div>
 
   <div class="card" style="margin-top:16px;">
@@ -165,7 +1002,95 @@
     <div class="card">
       <h3 style="margin-top:0;">Win / Loss &amp; CALL / PUT Mix</h3>
       <div class="grid" style="grid-template-columns:1fr 1fr; gap:10px;">
-        <div class="chart-box" style="height:220px;"><canvas id="winLossChart"></canvas></div>
+        
+
+<div id="tradeSideMeters" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin:12px 0;">
+  <style>
+    .side-meter-card { background: rgba(15, 23, 42, 0.72); border: 1px solid rgba(148, 163, 184, 0.24); border-radius: 10px; padding: 12px 14px; }
+    .side-meter-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; }
+    .side-pct-badge { font-family: monospace; font-size: 12px; padding: 2px 7px; border-radius: 6px; background: rgba(30, 41, 59, 0.95); border: 1px solid rgba(148, 163, 184, 0.28); }
+    .side-meter-row { display: grid; grid-template-columns: 3.2fr 1fr; gap: 8px; align-items: center; }
+    .side-zone-wrap { display: flex; flex-direction: column; gap: 4px; }
+    .side-zone-label { font-size: 10px; letter-spacing: 0.03em; opacity: 0.75; display: flex; justify-content: space-between; }
+    .side-meter-track { position: relative; height: 14px; border-radius: 999px; background: rgba(51, 65, 85, 0.7); overflow: visible; }
+    .side-meter-shadow { position: absolute; top: 0; left: 0; height: 100%; width: 0%; border-radius: 999px; opacity: 0.34; transition: width 0.2s ease; pointer-events: none; }
+    .side-meter-fill { position: relative; z-index: 2; height: 100%; width: 0%; border-radius: 999px; transition: width 0.2s ease; }
+    .side-meter-shadow.target { background: #4ade80; }
+    .side-meter-fill.target { background: #16a34a; }
+    .side-meter-shadow.target-ext { background: #38bdf8; }
+    .side-meter-fill.target-ext { background: #0284c7; }
+    .side-meter-shadow.sl { background: #f87171; }
+    .side-meter-fill.sl { background: #dc2626; }
+    .side-meter-shadow.sl-ext { background: #fb923c; }
+    .side-meter-fill.sl-ext { background: #ea580c; }
+    .side-live-pointer { position: absolute; top: -4px; width: 2px; height: 22px; background: #f8fafc; box-shadow: 0 0 6px rgba(248, 250, 252, 0.8); z-index: 4; transform: translateX(-1px); transition: left 0.2s ease; }
+    .side-live-tag { position: absolute; top: 18px; transform: translateX(-50%); font-family: monospace; font-size: 10px; font-weight: 600; color: #f8fafc; white-space: nowrap; }
+    .side-meter-foot { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; opacity: 0.88; margin-top: 20px; }
+  </style>
+
+  <!-- Target Side -->
+  <div class="side-meter-card">
+    <div class="side-meter-head">
+      <strong>Target Side</strong>
+      <span class="side-pct-badge" id="targetSideBadge">Now: 0.0% | Peak: 0.0%</span>
+    </div>
+    <div class="side-meter-row">
+      <div class="side-zone-wrap">
+        <div class="side-zone-label"><span>0%&ndash;100%</span><span id="targetCorePctTxt">0.0%</span></div>
+        <div class="side-meter-track" id="targetTrack">
+          <div class="side-meter-shadow target" id="targetShadowBar"></div>
+          <div class="side-meter-fill target" id="targetCurrentBar"></div>
+          <div class="side-live-pointer" id="targetLivePointer" style="left:0%;"><span class="side-live-tag" id="targetLiveTag">0.0%</span></div>
+        </div>
+      </div>
+      <div class="side-zone-wrap">
+        <div class="side-zone-label"><span>&gt;100%</span><span id="targetExtPctTxt">+0.0%</span></div>
+        <div class="side-meter-track" id="targetExtTrack">
+          <div class="side-meter-shadow target-ext" id="targetExtShadowBar"></div>
+          <div class="side-meter-fill target-ext" id="targetExtCurrentBar"></div>
+          <div class="side-live-pointer" id="targetExtPointer" style="left:0%;"><span class="side-live-tag" id="targetExtTag">0.0%</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="side-meter-foot">
+      <span id="targetPeakPrice">High Reached: -</span>
+      <span id="targetRevNote">State: Idle</span>
+    </div>
+  </div>
+
+  <!-- SL Side -->
+  <div class="side-meter-card">
+    <div class="side-meter-head">
+      <strong>SL Side</strong>
+      <span class="side-pct-badge" id="slSideBadge">Now: 0.0% | Peak: 0.0%</span>
+    </div>
+    <div class="side-meter-row">
+      <div class="side-zone-wrap">
+        <div class="side-zone-label"><span>0%&ndash;100%</span><span id="slCorePctTxt">0.0%</span></div>
+        <div class="side-meter-track" id="slTrack">
+          <div class="side-meter-shadow sl" id="slShadowBar"></div>
+          <div class="side-meter-fill sl" id="slCurrentBar"></div>
+          <div class="side-live-pointer" id="slLivePointer" style="left:0%;"><span class="side-live-tag" id="slLiveTag">0.0%</span></div>
+        </div>
+      </div>
+      <div class="side-zone-wrap">
+        <div class="side-zone-label"><span>&gt;100%</span><span id="slExtPctTxt">+0.0%</span></div>
+        <div class="side-meter-track" id="slExtTrack">
+          <div class="side-meter-shadow sl-ext" id="slExtShadowBar"></div>
+          <div class="side-meter-fill sl-ext" id="slExtCurrentBar"></div>
+          <div class="side-live-pointer" id="slExtPointer" style="left:0%;"><span class="side-live-tag" id="slExtTag">0.0%</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="side-meter-foot">
+      <span id="slPeakPrice">Worst Reached: -</span>
+      <span id="slRevNote">State: Idle</span>
+    </div>
+  </div>
+</div>
+
+
+<div class="chart-box" style="height:220px;"><canvas id="winLossChart"></canvas></div>
         <div class="chart-box" style="height:220px;"><canvas id="callPutChart"></canvas></div>
       </div>
     </div>
@@ -239,6 +1164,718 @@
       </div>
     </div>
   </div>
+<!-- CLEAN_SINGLE_METER_LOOP_START -->
+<script>
+(() => {
+  if (window.__cleanSingleMeterLoopInstalled) return;
+  window.__cleanSingleMeterLoopInstalled = true;
+
+  const store = {
+    dir: "PUT",
+    entry: NaN,
+    target: NaN,
+    sl: NaN,
+    spot: NaN,
+    tradeKey: ""
+  };
+
+  const state = {
+    curDeg: -90,
+    curBar: 0,
+    lastDegStr: "",
+    lastBarStr: ""
+  };
+
+  window.setCleanMeterSnapshot = function(cfg) {
+    if (!cfg) return;
+    const key = String(cfg.tradeKey || "");
+    if (key && store.tradeKey && key !== store.tradeKey) {
+      state.curDeg = -90;
+      state.curBar = 0;
+    }
+    store.tradeKey = key || store.tradeKey;
+    store.dir = String(cfg.direction || store.dir || "PUT").toUpperCase();
+    const e = Number(cfg.entry);
+    const t = Number(cfg.target);
+    const s = Number(cfg.sl);
+    const p = Number(cfg.spot);
+    if (Number.isFinite(e)) store.entry = e;
+    if (Number.isFinite(t)) store.target = t;
+    if (Number.isFinite(s)) store.sl = s;
+    if (Number.isFinite(p)) store.spot = p;
+  };
+
+  function calcTargetPct() {
+    if (![store.entry, store.target, store.spot].every(Number.isFinite)) return 0;
+    const span = Math.abs(store.target - store.entry);
+    if (!span) return 0;
+    const raw = (store.dir === "PUT" || store.dir === "SHORT")
+      ? ((store.entry - store.spot) / span) * 100
+      : ((store.spot - store.entry) / span) * 100;
+    return Math.max(0, Math.min(100, raw));
+  }
+
+  function stepFrame() {
+    const pct = calcTargetPct();
+    const goalDeg = -90 + (pct / 100) * 180;
+
+    state.curDeg = Math.abs(goalDeg - state.curDeg) < 0.05
+      ? goalDeg
+      : state.curDeg + (goalDeg - state.curDeg) * 0.15;
+
+    state.curBar = Math.abs(pct - state.curBar) < 0.05
+      ? pct
+      : state.curBar + (pct - state.curBar) * 0.15;
+
+    const degStr = `rotate(${state.curDeg.toFixed(2)}deg)`;
+    const barStr = `${state.curBar.toFixed(2)}%`;
+
+    const needle = document.getElementById("targetNeedle") || document.getElementById("glassTargetNeedle");
+    if (needle && degStr !== state.lastDegStr) {
+      needle.style.transform = degStr;
+      state.lastDegStr = degStr;
+    }
+
+    const bar = document.getElementById("targetCurrentBar") || document.getElementById("glassTargetCoreFill");
+    if (bar && barStr !== state.lastBarStr) {
+      bar.style.width = barStr;
+      state.lastBarStr = barStr;
+    }
+
+    requestAnimationFrame(stepFrame);
+  }
+
+  requestAnimationFrame(stepFrame);
+})();
+</script>
+<!-- CLEAN_SINGLE_METER_LOOP_END -->
+<!-- GLASS_MOVABLE_CARD_START -->
+<section id="glassTelemetryCard" class="glass-telemetry-card" aria-label="Glassy Telemetry Gauge Card">
+  <style>
+    .glass-telemetry-card {
+      position: relative;
+      margin: 14px 0 18px;
+      border-radius: 18px;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(56, 189, 248, 0.22), transparent 44%),
+        radial-gradient(circle at 88% 12%, rgba(16, 185, 129, 0.18), transparent 45%),
+        radial-gradient(circle at 50% 100%, rgba(244, 63, 94, 0.14), transparent 55%),
+        linear-gradient(155deg, rgba(15, 23, 42, 0.86), rgba(6, 11, 22, 0.94));
+      backdrop-filter: blur(14px) saturate(145%);
+      -webkit-backdrop-filter: blur(14px) saturate(145%);
+      border: 1px solid rgba(186, 230, 253, 0.28);
+      box-shadow:
+        0 18px 40px rgba(0, 0, 0, 0.52),
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        inset 0 -2px 6px rgba(2, 6, 23, 0.85);
+      color: #f8fafc;
+      overflow: hidden;
+      user-select: none;
+      font-variant-numeric: tabular-nums;
+    }
+    .glass-telemetry-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02));
+      border-bottom: 1px solid rgba(186, 230, 253, 0.18);
+      cursor: move;
+    }
+    .glass-telemetry-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      color: #f8fafc;
+      text-shadow: 0 1px 8px rgba(56, 189, 248, 0.35);
+    }
+    .glass-telemetry-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .glass-telemetry-btn {
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 7px;
+      border: 1px solid rgba(186, 230, 253, 0.32);
+      background: linear-gradient(180deg, rgba(51, 65, 85, 0.85), rgba(15, 23, 42, 0.95));
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        0 3px 10px rgba(0, 0, 0, 0.35);
+      color: #f8fafc;
+      cursor: pointer;
+    }
+    .glass-telemetry-btn:hover {
+      background: linear-gradient(180deg, rgba(14, 165, 233, 0.45), rgba(30, 41, 59, 0.98));
+      border-color: rgba(125, 211, 252, 0.65);
+    }
+    .glass-telemetry-body {
+      padding: 14px;
+      display: grid;
+      grid-template-columns: 250px 1fr;
+      gap: 18px;
+      align-items: center;
+    }
+    .glass-telemetry-card.is-collapsed .glass-telemetry-body {
+      display: none;
+    }
+    .glass-telemetry-card.is-expanded .glass-telemetry-body {
+      grid-template-columns: 310px 1fr;
+      padding: 18px;
+      gap: 22px;
+    }
+    .glass-dial-shell {
+      position: relative;
+      padding: 8px 8px 4px;
+      border-radius: 16px;
+      background:
+        radial-gradient(circle at 50% 88%, rgba(56, 189, 248, 0.16), transparent 62%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(2, 6, 23, 0.78));
+      border: 1px solid rgba(186, 230, 253, 0.24);
+      box-shadow:
+        inset 0 2px 10px rgba(0, 0, 0, 0.72),
+        inset 0 1px 0 rgba(255, 255, 255, 0.20),
+        0 8px 22px rgba(0, 0, 0, 0.42);
+    }
+    .glass-dial-svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      overflow: visible;
+    }
+    .glass-dial-tick-lbl {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 9.5px;
+      font-weight: 700;
+      fill: #cbd5e1;
+      text-anchor: middle;
+      dominant-baseline: central;
+    }
+    .glass-dial-tick-lbl.is-100 {
+      fill: #34d399;
+      font-size: 10.5px;
+    }
+    .glass-dial-tick-lbl.is-ext {
+      fill: #38bdf8;
+    }
+    .glass-odo-strip {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      padding: 5px 8px;
+      border-radius: 9px;
+      background: rgba(2, 6, 23, 0.82);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.75);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+    }
+    .glass-odo-val {
+      font-weight: 800;
+      color: #34d399;
+      text-shadow: 0 0 10px rgba(52, 211, 153, 0.55);
+    }
+    .glass-odo-sl {
+      font-weight: 800;
+      color: #fb7185;
+      text-shadow: 0 0 10px rgba(251, 113, 133, 0.5);
+    }
+    #glassCardNeedle {
+      transform-box: fill-box;
+      transform-origin: 50% 100%;
+      transition: none;
+      filter: drop-shadow(0 0 7px rgba(52, 211, 153, 0.85)) drop-shadow(0 4px 6px rgba(0, 0, 0, 0.75));
+    }
+    #glassCardSlNeedle {
+      transform-box: fill-box;
+      transform-origin: 50% 100%;
+      transition: none;
+      filter: drop-shadow(0 0 6px rgba(251, 113, 133, 0.78)) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.7));
+    }
+    .glass-meters-stack {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 780px) {
+      .glass-telemetry-body,
+      .glass-telemetry-card.is-expanded .glass-telemetry-body,
+      .glass-meters-stack {
+        grid-template-columns: 1fr;
+      }
+    }
+    .glass-side-box {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.68);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+    .glass-side-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .glass-zone-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .glass-zone-lbl {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .glass-emboss-rail {
+      position: relative;
+      height: 12px;
+      border-radius: 999px;
+      background: rgba(2, 6, 23, 0.75);
+      border: 1px solid rgba(148, 163, 184, 0.20);
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.68), 0 1px 0 rgba(255, 255, 255, 0.08);
+      overflow: visible;
+    }
+    .glass-emboss-shd {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      opacity: 0.38;
+      pointer-events: none;
+      transition: none;
+    }
+    .glass-emboss-fill {
+      position: relative;
+      z-index: 2;
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.40), 0 0 9px rgba(16, 185, 129, 0.28);
+      transition: none;
+    }
+    .glass-emboss-ptr {
+      position: absolute;
+      top: -3px;
+      width: 2px;
+      height: 18px;
+      background: #ffffff;
+      border-radius: 2px;
+      box-shadow: 0 0 6px rgba(255, 255, 255, 0.95);
+      z-index: 4;
+      transform: translateX(-1px);
+      transition: none;
+    }
+    .g-tgt-fill { background: linear-gradient(90deg, #0ea5e9, #10b981); }
+    .g-tgt-shd  { background: #34d399; }
+    .g-ext-fill { background: linear-gradient(90deg, #3b82f6, #6366f1); }
+    .g-ext-shd  { background: #60a5fa; }
+    .g-sl-fill  { background: linear-gradient(90deg, #f97316, #ef4444); }
+    .g-sl-shd   { background: #fb7185; }
+    .g-slo-fill { background: linear-gradient(90deg, #e11d48, #be123c); }
+    .g-slo-shd  { background: #fda4af; }
+    .glass-side-foot {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 7px;
+      font-size: 11px;
+      color: #94a3b8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .glass-card-meta {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      color: #cbd5e1;
+      margin-top: 10px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      background: rgba(2, 6, 23, 0.50);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+    }
+  </style>
+
+  <div class="glass-telemetry-hdr" id="glassCardDragHandle">
+    <span class="glass-telemetry-title">SuperSpeedo Telemetry ? Target &amp; SL Embossed Gauges</span>
+    <div class="glass-telemetry-actions">
+      <button type="button" class="glass-telemetry-btn" id="glassCardJumpTopBtn">Jump to Top</button>
+      <button type="button" class="glass-telemetry-btn" id="glassCardExpandBtn">Expand</button>
+      <button type="button" class="glass-telemetry-btn" id="glassCardCollapseBtn">Collapse</button>
+    </div>
+  </div>
+
+  <div class="glass-telemetry-body">
+    <div class="glass-dial-shell">
+      <svg class="glass-dial-svg" viewBox="0 0 260 146" aria-hidden="true">
+        <defs>
+          <linearGradient id="glassArcBaseGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.35" />
+            <stop offset="66%" stop-color="#34d399" stop-opacity="0.42" />
+            <stop offset="100%" stop-color="#fb7185" stop-opacity="0.42" />
+          </linearGradient>
+          <linearGradient id="glassNeedleBeam" x1="0%" y1="100%" x2="0%" y2="0%">
+            <stop offset="0%" stop-color="#a7f3d0" />
+            <stop offset="55%" stop-color="#34d399" />
+            <stop offset="100%" stop-color="#ffffff" />
+          </linearGradient>
+          <radialGradient id="glassHubCap" cx="35%" cy="30%" r="70%">
+            <stop offset="0%" stop-color="#ffffff" />
+            <stop offset="55%" stop-color="#bae6fd" />
+            <stop offset="100%" stop-color="#0284c7" />
+          </radialGradient>
+        </defs>
+
+        <!-- Wide embossed outer & inner bezel track -->
+        <path d="M 24 118 A 106 106 0 0 1 236 118" fill="none" stroke="rgba(2,6,23,0.75)" stroke-width="22" stroke-linecap="round" />
+        <path d="M 24 118 A 106 106 0 0 1 236 118" fill="none" stroke="url(#glassArcBaseGrad)" stroke-width="16" stroke-linecap="round" />
+        <path d="M 38 118 A 92 92 0 0 1 222 118" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" stroke-dasharray="3 4" />
+
+        <!-- Scale ticks & percentage labels (0% to 150% across -90deg..+90deg) -->
+        <g id="glassDialTicks"></g>
+
+        <!-- Secondary SL needle (bright crimson-rose) -->
+        <g id="glassCardSlNeedle" style="transform: rotate(-90deg);">
+          <polygon points="127,118 133,118 131.2,40 128.8,40" fill="#fb7185" opacity="0.92" />
+          <circle cx="130" cy="40" r="2.6" fill="#ffe4e6" />
+        </g>
+
+        <!-- Primary Target needle (thick luminous emerald/cyan beam) -->
+        <g id="glassCardNeedle" style="transform: rotate(-90deg);">
+          <polygon points="125.5,120 134.5,120 132,23 128,23" fill="url(#glassNeedleBeam)" />
+          <line x1="130" y1="116" x2="130" y2="25" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round" opacity="0.9" />
+          <circle cx="130" cy="23" r="3.4" fill="#ffffff" />
+        </g>
+
+        <!-- Embossed center hub -->
+        <circle cx="130" cy="118" r="12" fill="rgba(15,23,42,0.95)" stroke="rgba(186,230,253,0.55)" stroke-width="2" />
+        <circle cx="130" cy="118" r="7.5" fill="url(#glassHubCap)" />
+      </svg>
+
+      <div class="glass-odo-strip">
+        <span>TGT <span class="glass-odo-val" id="glassOdoTgt">0.0%</span></span>
+        <span>SL <span class="glass-odo-sl" id="glassOdoSl">0.0%</span></span>
+      </div>
+    </div>
+
+    <div>
+      <div class="glass-meters-stack">
+        <div class="glass-side-box">
+          <div class="glass-side-top">
+            <span style="color:#34d399;">Target Excursion</span>
+            <span id="glassCardTgtSummary">0.0%</span>
+          </div>
+          <div class="glass-zone-grid">
+            <div>
+              <div class="glass-zone-lbl"><span>0-100%</span><span id="glassCardTCoreTxt">0.0%</span></div>
+              <div class="glass-emboss-rail">
+                <div class="glass-emboss-shd g-tgt-shd" id="glassCardTCoreShd"></div>
+                <div class="glass-emboss-fill g-tgt-fill" id="glassCardTCoreFill"></div>
+                <div class="glass-emboss-ptr" id="glassCardTCorePtr" style="left:0%;"></div>
+              </div>
+            </div>
+            <div>
+              <div class="glass-zone-lbl"><span>&gt;100% Ext</span><span id="glassCardTExtTxt">+0.0%</span></div>
+              <div class="glass-emboss-rail">
+                <div class="glass-emboss-shd g-ext-shd" id="glassCardTExtShd"></div>
+                <div class="glass-emboss-fill g-ext-fill" id="glassCardTExtFill"></div>
+                <div class="glass-emboss-ptr" id="glassCardTExtPtr" style="left:0%;"></div>
+              </div>
+            </div>
+          </div>
+          <div class="glass-side-foot">
+            <span id="glassCardTPeakTxt">Peak: 0.0%</span>
+            <span id="glassCardTStateTxt">Idle</span>
+          </div>
+        </div>
+
+        <div class="glass-side-box">
+          <div class="glass-side-top">
+            <span style="color:#fb7185;">SL Risk Excursion</span>
+            <span id="glassCardSlSummary">0.0%</span>
+          </div>
+          <div class="glass-zone-grid">
+            <div>
+              <div class="glass-zone-lbl"><span>0-100%</span><span id="glassCardSCoreTxt">0.0%</span></div>
+              <div class="glass-emboss-rail">
+                <div class="glass-emboss-shd g-sl-shd" id="glassCardSCoreShd"></div>
+                <div class="glass-emboss-fill g-sl-fill" id="glassCardSCoreFill"></div>
+                <div class="glass-emboss-ptr" id="glassCardSCorePtr" style="left:0%;"></div>
+              </div>
+            </div>
+            <div>
+              <div class="glass-zone-lbl"><span>&gt;100% Over</span><span id="glassCardSExtTxt">+0.0%</span></div>
+              <div class="glass-emboss-rail">
+                <div class="glass-emboss-shd g-slo-shd" id="glassCardSExtShd"></div>
+                <div class="glass-emboss-fill g-slo-fill" id="glassCardSExtFill"></div>
+                <div class="glass-emboss-ptr" id="glassCardSExtPtr" style="left:0%;"></div>
+              </div>
+            </div>
+          </div>
+          <div class="glass-side-foot">
+            <span id="glassCardSPeakTxt">Peak: 0.0%</span>
+            <span id="glassCardSStateTxt">Idle</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-card-meta" id="glassCardMetaText">Waiting for status snapshot...</div>
+    </div>
+  </div>
+</section>
+
+<script>
+(() => {
+  if (window.__glassTelemetryCardInit) return;
+  window.__glassTelemetryCardInit = true;
+
+  const card = document.getElementById("glassTelemetryCard");
+  const handle = document.getElementById("glassCardDragHandle");
+  const jumpTopBtn = document.getElementById("glassCardJumpTopBtn");
+  const expandBtn = document.getElementById("glassCardExpandBtn");
+  const collapseBtn = document.getElementById("glassCardCollapseBtn");
+  const needle = document.getElementById("glassCardNeedle");
+  const slNeedle = document.getElementById("glassCardSlNeedle");
+  const metaTxt = document.getElementById("glassCardMetaText");
+  const ticksGroup = document.getElementById("glassDialTicks");
+
+  // Build crisp odometer/speedometer ticks (0%..150% across -90deg..+90deg)
+  if (ticksGroup && !ticksGroup.childElementCount) {
+    const cx = 130, cy = 118, rInner = 93, rOuter = 105, rLbl = 76;
+    const majorPcts = [0, 25, 50, 75, 100, 125, 150];
+    for (let pct = 0; pct <= 150; pct += 5) {
+      const isMajor = majorPcts.includes(pct);
+      const deg = -90 + (pct / 150) * 180;
+      const rad = (deg - 90) * (Math.PI / 180);
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+
+      const tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      const r0 = isMajor ? rInner - 3 : rInner + 2;
+      tick.setAttribute("x1", (cx + cos * r0).toFixed(2));
+      tick.setAttribute("y1", (cy + sin * r0).toFixed(2));
+      tick.setAttribute("x2", (cx + cos * rOuter).toFixed(2));
+      tick.setAttribute("y2", (cy + sin * rOuter).toFixed(2));
+      tick.setAttribute("stroke", pct >= 100 ? "rgba(56,189,248,0.85)" : "rgba(241,245,249,0.72)");
+      tick.setAttribute("stroke-width", isMajor ? "2.1" : "1.1");
+      ticksGroup.appendChild(tick);
+
+      if (isMajor) {
+        const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        lbl.setAttribute("x", (cx + cos * rLbl).toFixed(2));
+        lbl.setAttribute("y", (cy + sin * rLbl).toFixed(2));
+        lbl.setAttribute("class", `glass-dial-tick-lbl ${pct === 100 ? "is-100" : (pct > 100 ? "is-ext" : "")}`);
+        lbl.textContent = `${pct}%`;
+        ticksGroup.appendChild(lbl);
+      }
+    }
+  }
+
+  const el = {
+    odoT: document.getElementById("glassOdoTgt"),
+    odoS: document.getElementById("glassOdoSl"),
+    tSum: document.getElementById("glassCardTgtSummary"),
+    tCoreTxt: document.getElementById("glassCardTCoreTxt"),
+    tCoreShd: document.getElementById("glassCardTCoreShd"),
+    tCoreFill: document.getElementById("glassCardTCoreFill"),
+    tCorePtr: document.getElementById("glassCardTCorePtr"),
+    tExtTxt: document.getElementById("glassCardTExtTxt"),
+    tExtShd: document.getElementById("glassCardTExtShd"),
+    tExtFill: document.getElementById("glassCardTExtFill"),
+    tExtPtr: document.getElementById("glassCardTExtPtr"),
+    tPeakTxt: document.getElementById("glassCardTPeakTxt"),
+    tStateTxt: document.getElementById("glassCardTStateTxt"),
+
+    sSum: document.getElementById("glassCardSlSummary"),
+    sCoreTxt: document.getElementById("glassCardSCoreTxt"),
+    sCoreShd: document.getElementById("glassCardSCoreShd"),
+    sCoreFill: document.getElementById("glassCardSCoreFill"),
+    sCorePtr: document.getElementById("glassCardSCorePtr"),
+    sExtTxt: document.getElementById("glassCardSExtTxt"),
+    sExtShd: document.getElementById("glassCardSExtShd"),
+    sExtFill: document.getElementById("glassCardSExtFill"),
+    sExtPtr: document.getElementById("glassCardSExtPtr"),
+    sPeakTxt: document.getElementById("glassCardSPeakTxt"),
+    sStateTxt: document.getElementById("glassCardSStateTxt")
+  };
+
+  function jumpCardToTop() {
+    if (!card) return;
+    card.style.left = "0px";
+    card.style.top = "0px";
+    card.style.zIndex = "30";
+    const mainCol = card.closest("main, .container, .container-fluid, .page-wrap, body");
+    if (mainCol && mainCol.firstElementChild && mainCol.firstElementChild !== card) {
+      mainCol.insertBefore(card, mainCol.firstElementChild);
+    }
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  if (jumpTopBtn) {
+    jumpTopBtn.addEventListener("click", jumpCardToTop);
+  }
+
+  if (expandBtn && card) {
+    expandBtn.addEventListener("click", () => {
+      card.classList.remove("is-collapsed");
+      card.classList.toggle("is-expanded");
+      expandBtn.textContent = card.classList.contains("is-expanded") ? "Compact" : "Expand";
+    });
+  }
+  if (collapseBtn && card) {
+    collapseBtn.addEventListener("click", () => {
+      card.classList.remove("is-expanded");
+      card.classList.toggle("is-collapsed");
+      collapseBtn.textContent = card.classList.contains("is-collapsed") ? "Open" : "Collapse";
+    });
+  }
+
+  if (card && handle) {
+    let dragging = false;
+    let startX = 0, startY = 0, origX = 0, origY = 0;
+
+    handle.addEventListener("pointerdown", (e) => {
+      if (e.target && e.target.closest("button")) return;
+      dragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      origX = parseFloat(card.style.left || "0") || 0;
+      origY = parseFloat(card.style.top || "0") || 0;
+      card.style.zIndex = "30";
+      handle.setPointerCapture(e.pointerId);
+    });
+
+    handle.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      card.style.left = `${Math.round(origX + (e.clientX - startX))}px`;
+      card.style.top = `${Math.round(origY + (e.clientY - startY))}px`;
+    });
+
+    const endDrag = () => { dragging = false; };
+    handle.addEventListener("pointerup", endDrag);
+    handle.addEventListener("pointercancel", endDrag);
+  }
+
+  const EXT_SPAN_PCT = 100;
+  let activeKey = "";
+  let peakT = 0;
+  let peakS = 0;
+  let lastSig = "";
+
+  window.renderGlassTelemetryCard = function(cfg) {
+    if (!cfg) return;
+    const key = String(cfg.tradeKey || "");
+    if (key && activeKey && key !== activeKey) {
+      peakT = 0;
+      peakS = 0;
+    }
+    if (key) activeKey = key;
+
+    const dir = String(cfg.direction || "PUT").toUpperCase();
+    const entry = Number(cfg.entry);
+    const target = Number(cfg.target);
+    const sl = Number(cfg.sl);
+    const spot = Number(cfg.spot);
+    if (![entry, target, spot].every(Number.isFinite)) return;
+
+    const tSpan = Math.abs(target - entry);
+    const sSpan = Number.isFinite(sl) ? Math.abs(entry - sl) : 0;
+
+    let tPct = 0;
+    let sPct = 0;
+    if (dir === "PUT" || dir === "SHORT") {
+      if (tSpan > 0) tPct = Math.max(0, ((entry - spot) / tSpan) * 100);
+      if (sSpan > 0) sPct = Math.max(0, ((spot - entry) / sSpan) * 100);
+    } else {
+      if (tSpan > 0) tPct = Math.max(0, ((spot - entry) / tSpan) * 100);
+      if (sSpan > 0) sPct = Math.max(0, ((entry - spot) / sSpan) * 100);
+    }
+
+    if (tPct > peakT) peakT = tPct;
+    if (sPct > peakS) peakS = sPct;
+
+    const sig = `${dir}|${entry}|${target}|${sl}|${spot.toFixed(2)}|${tPct.toFixed(2)}|${peakT.toFixed(2)}|${sPct.toFixed(2)}|${peakS.toFixed(2)}`;
+    if (sig === lastSig) return;
+    lastSig = sig;
+
+    const tCore = Math.min(100, tPct);
+    const tCorePeak = Math.min(100, peakT);
+    const tOver = Math.max(0, tPct - 100);
+    const tOverPeak = Math.max(0, peakT - 100);
+    const tExtBar = Math.min(100, (tOver / EXT_SPAN_PCT) * 100);
+    const tExtShd = Math.min(100, (tOverPeak / EXT_SPAN_PCT) * 100);
+
+    const sCore = Math.min(100, sPct);
+    const sCorePeak = Math.min(100, peakS);
+    const sOver = Math.max(0, sPct - 100);
+    const sOverPeak = Math.max(0, peakS - 100);
+    const sExtBar = Math.min(100, (sOver / EXT_SPAN_PCT) * 100);
+    const sExtShd = Math.min(100, (sOverPeak / EXT_SPAN_PCT) * 100);
+
+    const dialClamped = Math.max(0, Math.min(150, tPct));
+    const tgtDeg = (-90 + (dialClamped / 150) * 180).toFixed(2);
+    const slClamped = Math.max(0, Math.min(150, sPct));
+    const slDeg = (-90 + (slClamped / 150) * 180).toFixed(2);
+
+    if (needle) needle.style.transform = `rotate(${tgtDeg}deg)`;
+    if (slNeedle) slNeedle.style.transform = `rotate(${slDeg}deg)`;
+
+    if (el.odoT) el.odoT.textContent = `${tPct.toFixed(1)}%`;
+    if (el.odoS) el.odoS.textContent = `${sPct.toFixed(1)}%`;
+
+    if (el.tSum) el.tSum.textContent = `${tPct.toFixed(1)}%`;
+    if (el.tCoreTxt) el.tCoreTxt.textContent = `${tCore.toFixed(1)}%`;
+    if (el.tCoreShd) el.tCoreShd.style.width = `${tCorePeak.toFixed(2)}%`;
+    if (el.tCoreFill) el.tCoreFill.style.width = `${tCore.toFixed(2)}%`;
+    if (el.tCorePtr) el.tCorePtr.style.left = `${tCore.toFixed(2)}%`;
+
+    if (el.tExtTxt) el.tExtTxt.textContent = `+${tOver.toFixed(1)}%`;
+    if (el.tExtShd) el.tExtShd.style.width = `${tExtShd.toFixed(2)}%`;
+    if (el.tExtFill) el.tExtFill.style.width = `${tExtBar.toFixed(2)}%`;
+    if (el.tExtPtr) el.tExtPtr.style.left = `${tExtBar.toFixed(2)}%`;
+
+    if (el.tPeakTxt) el.tPeakTxt.textContent = `Peak: ${peakT.toFixed(1)}%`;
+    if (el.tStateTxt) {
+      const pull = peakT - tPct;
+      el.tStateTxt.textContent = tPct > 100 ? "Extended" : (pull > 0.5 ? `-${pull.toFixed(1)}%` : "Live");
+    }
+
+    if (el.sSum) el.sSum.textContent = `${sPct.toFixed(1)}%`;
+    if (el.sCoreTxt) el.sCoreTxt.textContent = `${sCore.toFixed(1)}%`;
+    if (el.sCoreShd) el.sCoreShd.style.width = `${sCorePeak.toFixed(2)}%`;
+    if (el.sCoreFill) el.sCoreFill.style.width = `${sCore.toFixed(2)}%`;
+    if (el.sCorePtr) el.sCorePtr.style.left = `${sCore.toFixed(2)}%`;
+
+    if (el.sExtTxt) el.sExtTxt.textContent = `+${sOver.toFixed(1)}%`;
+    if (el.sExtShd) el.sExtShd.style.width = `${sExtShd.toFixed(2)}%`;
+    if (el.sExtFill) el.sExtFill.style.width = `${sExtBar.toFixed(2)}%`;
+    if (el.sExtPtr) el.sExtPtr.style.left = `${sExtBar.toFixed(2)}%`;
+
+    if (el.sPeakTxt) el.sPeakTxt.textContent = `Peak: ${peakS.toFixed(1)}%`;
+    if (el.sStateTxt) {
+      const rec = peakS - sPct;
+      el.sStateTxt.textContent = sPct > 100 ? "Overrun" : (rec > 0.5 ? `-${rec.toFixed(1)}%` : "Live");
+    }
+
+    if (metaTxt) {
+      const slStr = Number.isFinite(sl) ? sl.toFixed(2) : "-";
+      metaTxt.textContent = `${dir} | Entry ${entry.toFixed(2)} | Tgt ${target.toFixed(2)} | SL ${slStr} | Spot ${spot.toFixed(2)}`;
+    }
+  };
+})();
+</script>
+<!-- GLASS_MOVABLE_CARD_END -->
 {% endblock %}
 
 {% block scripts %}
@@ -420,22 +2057,60 @@
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
     });
 
+    if (charts.winLoss) { charts.winLoss.destroy(); }
+    const winVal = Number(s.wins || 0);
+    const lossVal = Number(s.losses || 0);
+    const hasWinLoss = (winVal + lossVal) > 0;
     charts.winLoss = new Chart(document.getElementById("winLossChart"), {
       type: "doughnut",
       data: {
-        labels: ["WIN", "LOSS"],
-        datasets: [{ data: [s.wins, s.losses], backgroundColor: ["#22c55e", "#ef4444"] }]
+        labels: hasWinLoss ? ["WIN", "LOSS"] : ["No Trades"],
+        datasets: [{
+          data: hasWinLoss ? [winVal, lossVal] : [1],
+          backgroundColor: hasWinLoss ? ["#22c55e", "#ef4444"] : ["#334155"]
+        }]
       },
-      options: { responsive: true, maintainAspectRatio: false }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                return hasWinLoss ? (ctx.label + ": " + ctx.parsed) : "No Trades: 0";
+              }
+            }
+          }
+        }
+      }
     });
 
+    if (charts.callPut) { charts.callPut.destroy(); }
+    const callVal = Number(s.call_cnt || 0);
+    const putVal = Number(s.put_cnt || 0);
+    const hasCallPut = (callVal + putVal) > 0;
     charts.callPut = new Chart(document.getElementById("callPutChart"), {
       type: "doughnut",
       data: {
-        labels: ["CALL", "PUT"],
-        datasets: [{ data: [s.call_cnt, s.put_cnt], backgroundColor: ["#38bdf8", "#f59e0b"] }]
+        labels: hasCallPut ? ["CALL", "PUT"] : ["No Trades"],
+        datasets: [{
+          data: hasCallPut ? [callVal, putVal] : [1],
+          backgroundColor: hasCallPut ? ["#38bdf8", "#f59e0b"] : ["#334155"]
+        }]
       },
-      options: { responsive: true, maintainAspectRatio: false }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                return hasCallPut ? (ctx.label + ": " + ctx.parsed) : "No Trades: 0";
+              }
+            }
+          }
+        }
+      }
     });
 
     const p = data.pagination;
@@ -601,15 +2276,50 @@
 
     const estEl = document.querySelector(`[data-est="${IDX_KEY}"]`);
     if (estEl) {
-      const e = idx.entry_price ?? "-";
-      const s = idx.stop_price ?? "-";
-      const t = idx.target_price ?? "-";
-      estEl.textContent = `${e} / ${s} / ${t}`;
+      estEl.textContent = idx.entry_price ?? "-";
+    }
+    const slEl = document.querySelector(`[data-sl-price="${IDX_KEY}"]`);
+    if (slEl) {
+      slEl.textContent = idx.stop_price ?? "-";
+    }
+    const tgtEl = document.querySelector(`[data-target-range="${IDX_KEY}"]`);
+    if (tgtEl) {
+      const t60 = idx.target_price ?? "-";
+      const levels = (idx.target_ladder && Array.isArray(idx.target_ladder.levels)) ? idx.target_ladder.levels : [];
+      const t100 = levels.length ? levels[levels.length - 1].price : null;
+      tgtEl.textContent = (t100 != null && t100 !== t60) ? `${t60} - ${t100}` : `${t60}`;
     }
 
     const tradesEl = document.querySelector(`[data-trades="${IDX_KEY}"]`);
     if (tradesEl && data.rules) {
       tradesEl.textContent = `${idx.trades_today ?? 0} / ${data.rules.max_trades_per_day ?? 2}`;
+    }
+
+    if (typeof window.updateTradeSideMeters === "function") {
+      const hasLiveSpot = (idx.spot_price != null && Number.isFinite(Number(idx.spot_price)));
+      const candidateSpot = hasLiveSpot ? Number(idx.spot_price) : Number(window.__lastValidSpot);
+      const prevMeterSpot = Number(window.__lastMeterSpot);
+      const spikeJump = Number.isFinite(prevMeterSpot) && Number.isFinite(candidateSpot) && Math.abs(candidateSpot - prevMeterSpot) > 18;
+      if (spikeJump && !window.__pendingSpikeSpot) {
+        window.__pendingSpikeSpot = candidateSpot;
+      } else {
+        window.__pendingSpikeSpot = null;
+        if (hasLiveSpot && Number.isFinite(candidateSpot)) {
+          window.__lastValidSpot = candidateSpot;
+        }
+        const meterSpot = Number.isFinite(candidateSpot) ? candidateSpot : window.__lastValidSpot;
+        if (Number.isFinite(meterSpot)) {
+          window.__lastMeterSpot = meterSpot;
+          window.updateTradeSideMeters({
+            direction: idx.armed_dir || idx.direction || "PUT",
+            entry: idx.entry_price,
+            target: idx.target_price,
+            sl: idx.stop_price,
+            spot: meterSpot,
+            tradeKey: `${IDX_KEY}|${idx.session_date || ""}|${idx.armed_dir || idx.direction || ""}|${idx.entry_price ?? ""}`
+          });
+        }
+      }
     }
   };
 

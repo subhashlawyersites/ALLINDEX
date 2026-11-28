@@ -586,10 +586,17 @@
       if (!idx || !Number.isFinite(price)) return;
       const barTime = String(timeLabel || idx.last_bar_time || idx.bar_time || "").trim();
       const charts = [];
+      const analyticsCanvasIds = new Set([
+        "winLossChart", "callPutChart", "curveChart", "weekdayChart",
+        "exitChart", "targetProgressChart", "smaChart"
+      ]);
       if (window.Chart && typeof window.Chart.getChart === "function") {
         document.querySelectorAll("canvas").forEach(c => {
+          if (c && analyticsCanvasIds.has(c.id)) return;
           const ch = window.Chart.getChart(c);
-          if (ch) charts.push(ch);
+          if (ch && ch.config && ch.config.type !== "doughnut" && ch.config.type !== "pie") {
+            charts.push(ch);
+          }
         });
       }
       if (window.livePriceChart && !charts.includes(window.livePriceChart)) {
